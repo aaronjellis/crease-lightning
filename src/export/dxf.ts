@@ -1,7 +1,9 @@
 /**
- * One piece as ASCII DXF (R12): millimetres, layers `CUT` and `SCORE`, POLYLINE/VERTEX entities.
- * DXF is y-up, so this writes the raw flat y (the SVG export flips it). Folds go on `SCORE`, or on
- * `CUT` as perforations when the target perforates.
+ * One piece as ASCII DXF, strict R12 (AC1009): an LTYPE table defining CONTINUOUS, layers `CUT` and
+ * `SCORE`, POLYLINE/VERTEX entities. R12 has no units header (`$INSUNITS` came later), so millimetres
+ * are implied and the steps say so (M4). DXF is y-up, so this writes the raw flat y (the SVG export
+ * flips it). Folds go on `SCORE`, or on `CUT` as perforations when the target perforates; a
+ * perforated piece has no `SCORE` layer at all.
  */
 import type { Pt } from '@kerfuffle/engine/geom';
 import type { Card } from '../core/build';
@@ -26,16 +28,26 @@ export function pieceDxf(piece: Piece, target: Target): string {
   g(2, 'HEADER');
   g(9, '$ACADVER');
   g(1, 'AC1009');
-  g(9, '$INSUNITS');
-  g(70, 4);
   g(0, 'ENDSEC');
   g(0, 'SECTION');
   g(2, 'TABLES');
   g(0, 'TABLE');
+  g(2, 'LTYPE');
+  g(70, 1);
+  g(0, 'LTYPE');
+  g(2, 'CONTINUOUS');
+  g(70, 0);
+  g(3, 'Solid line');
+  g(72, 65);
+  g(73, 0);
+  g(40, 0);
+  g(0, 'ENDTAB');
+  const scored = target.fold === 'score' && piece.folds.length > 0;
+  g(0, 'TABLE');
   g(2, 'LAYER');
-  g(70, 2);
+  g(70, scored ? 2 : 1);
   layer('CUT', 1);
-  layer('SCORE', 5);
+  if (scored) layer('SCORE', 5);
   g(0, 'ENDTAB');
   g(0, 'ENDSEC');
   g(0, 'SECTION');

@@ -7,18 +7,19 @@
  * y_out = heightMm - y. The sheet is cut inside-face up and the SVG's y axis points down, so the
  * flip makes the text read correctly on the mat.
  *
- * Layers: every piece has a `Cut` group and a `Score` group, always both present. The Score
- * group is empty when folds are perforated (they go in Cut), so the layer structure is stable
- * across targets.
+ * Layers: every piece has a `Cut` group, and a `Score` group when it has score lines. Perforated
+ * folds go in Cut, so a perforated piece has no Score group (an empty layer would only confuse the
+ * machine's software, and the steps never mention one).
  */
 import type { Poly, Pt } from '@kerfuffle/engine/geom';
 import { polyToSvgPath } from '@kerfuffle/engine/geom';
 import type { Card } from '../core/build';
 import { ATOMM_CUT, ATOMM_ENGRAVE } from '../core/constants';
 import type { Piece } from '../core/flatten';
-import type { FoldStyle } from '../core/model';
 import { perforate } from './perforate';
-import type { Target } from './targets';
+import { withFoldStyle, type Target } from './targets';
+
+export { withFoldStyle };
 
 export interface Colours {
   cut: string;
@@ -31,11 +32,6 @@ const STROKE_MM = 0.1;
 const NS = 'xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"';
 
 const num = (v: number): string => String(Number(v.toFixed(3)));
-
-/** The target with `foldStyle` applied: `auto` keeps the target's own style. */
-export function withFoldStyle(target: Target, foldStyle: FoldStyle): Target {
-  return foldStyle === 'auto' || foldStyle === target.fold ? target : { ...target, fold: foldStyle };
-}
 
 function hexToHsl(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
@@ -61,12 +57,19 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${to(r)}${to(g)}${to(b)}`;
 }
 
-/** The paper colour for cut (light grey when its HSL lightness exceeds 0.9), and that colour with its HSL lightness reduced by 35% (L x 0.65) for score. */
+/** Under this HSL lightness a paper is dark: darkening it more would make score and cut look alike. */
+const DARK_PAPER_L = 0.25;
+
+/**
+ * The paper colour for cut (light grey when its HSL lightness exceeds 0.9), and for score that colour
+ * with its HSL lightness reduced by 35% (L × 0.65), or on a dark paper raised by 0.35 (M3).
+ */
 export function paperColours(card: Card, piece: 'inner' | 'jacket'): Colours {
   const paper = card.params.colours[piece].toLowerCase();
   const [h, s, l] = hexToHsl(paper);
+  const scoreL = l < DARK_PAPER_L ? Math.min(1, l + 0.35) : l * 0.65;
   // Near-white strokes are invisible in Design Space, so those papers cut in light grey (R16).
-  return { cut: l > 0.9 ? NEAR_WHITE_CUT : paper, score: hslToHex(h, s, l * 0.65) };
+  return { cut: l > 0.9 ? NEAR_WHITE_CUT : paper, score: hslToHex(h, s, scoreL) };
 }
 
 /** The stroke colours for a piece on a target: paper colours, or the two Atomm laser colours. */
@@ -112,7 +115,7 @@ function layers(piece: Piece, target: Target, colours: Colours, f: Frame, prefix
     target.fold === 'score' ? piece.folds.map((fold) => path(openPath(fold.path, f), colours.score, mark(preview, 'fold', fold.kind))) : [];
   const group = (id: string, items: string[]) =>
     `<g id="${prefix}${id}" inkscape:label="${prefix}${id}" inkscape:groupmode="layer">${items.join('')}</g>`;
-  return group('Cut', cut) + group('Score', score);
+  return group('Cut', cut) + (score.length ? group('Score', score) : '');
 }
 
 const svgOpen = (w: number, h: number): string =>

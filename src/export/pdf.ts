@@ -11,7 +11,7 @@ import type { Piece } from '../core/flatten';
 import type { Params } from '../core/model';
 import { slugName } from './slug';
 import { perforate } from './perforate';
-import type { Target } from './targets';
+import { stepsFor, type Target } from './targets';
 
 const LETTER = { w: 215.9, h: 279.4 };
 const TABLOID = { w: 279.4, h: 431.8 };
@@ -132,7 +132,10 @@ export function printPdf(card: Card): Uint8Array {
 
 const plain = (s: string, name: string) => s.replace(/`/g, '').replace(/<name>/g, name);
 
-/** Page 1: the target's steps, then the folding steps. Optional PNGs (by fold step id) add one page each. */
+/**
+ * Page 1: the target's steps for this card, then the folding steps. Optional stills (by fold step id;
+ * JPEG or PNG bytes) add one page each. Pass the target with the card's fold style applied.
+ */
 export function howToPdf(card: Card, target: Target, images: { step: string; png: Uint8Array }[] = [], name: string = slugName(card.params.line1)): Uint8Array {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const left = 20;
@@ -156,7 +159,7 @@ export function howToPdf(card: Card, target: Target, images: { step: string; png
   doc.text('Make your pop-up card', left, y);
   y += 12;
   heading(`Cut it: ${target.label}`);
-  target.steps.forEach((s, i) => item(i + 1, plain(s, name)));
+  stepsFor(target, card).forEach((s, i) => item(i + 1, plain(s, name)));
   y += 6;
   heading('Fold it');
   FOLD_STEPS.forEach((s, i) => item(i + 1, s.text));
@@ -169,7 +172,10 @@ export function howToPdf(card: Card, target: Target, images: { step: string; png
     doc.setFontSize(14);
     const lines = doc.splitTextToSize(s.text, width) as string[];
     doc.text(lines, left, 24);
-    doc.addImage(img.png, 'PNG', left, 24 + lines.length * 6 + 4, width, width * 0.75);
+    // JPEG stills embed as they are; a PNG is deflated (FAST), not stored raw, so four stills stay
+    // well under 1 MB (M13).
+    const jpeg = img.png[0] === 0xff && img.png[1] === 0xd8;
+    doc.addImage(img.png, jpeg ? 'JPEG' : 'PNG', left, 24 + lines.length * 6 + 4, width, width * 0.75, undefined, 'FAST');
   }
   return new Uint8Array(doc.output('arraybuffer'));
 }

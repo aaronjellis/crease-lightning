@@ -17,7 +17,7 @@ export interface SceneLike {
   setTheta(deg: number): void;
   animateTo(deg: number): Promise<void>;
   setFoldStep(i: number | null): void;
-  renderPng(width: number, height: number, thetaDeg: number, view: ViewName): Promise<Uint8Array>;
+  renderPng(width: number, height: number, thetaDeg: number, view: ViewName, type?: 'image/png' | 'image/jpeg'): Promise<Uint8Array>;
   dispose(): void;
 }
 

@@ -98,6 +98,9 @@ describe('structure', () => {
     const ids = Array.from(doc.getElementsByTagName('g')).map((g) => g.getAttribute('id'));
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toEqual(expect.arrayContaining(['Inner-Cut', 'Inner-Score', 'Jacket-Cut', 'Jacket-Score']));
+    // Perforated: the Score groups are left out, not left empty.
+    const perf = Array.from(parse(bothSvg(card, TARGETS['xtool-laser'])).getElementsByTagName('g')).map((g) => g.getAttribute('id'));
+    expect(perf).toEqual(['Inner-Cut', 'Jacket-Cut']);
     const xs = Array.from(doc.getElementsByTagName('path')).flatMap((p) => Array.from(p.getAttribute('d')!.matchAll(/(-?[\d.]+) -?[\d.]+/g), (m) => Number(m[1])));
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(-0.001);
     expect(Math.max(...xs)).toBeLessThanOrEqual(Number(root.getAttribute('width')!.replace('mm', '')) + 0.001);
@@ -120,12 +123,26 @@ describe('colours', () => {
     expect(j.cut).toBe('#e8453c');
     expect(j.score).not.toBe(j.cut);
   });
+  test('a dark paper scores lighter, not darker (M3)', () => {
+    const lightness = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      return (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
+    };
+    const dark = { ...card, params: { ...card.params, colours: { inner: '#1a1a2e', jacket: '#000000' } } };
+    for (const piece of ['inner', 'jacket'] as const) {
+      const { cut, score } = paperColours(dark, piece);
+      expect(lightness(score)).toBeCloseTo(lightness(cut) + 0.35, 2);
+    }
+    // At 0.25 and above, score is still the paper at 65% lightness.
+    const mid = { ...card, params: { ...card.params, colours: { inner: '#404040', jacket: '#404040' } } };
+    expect(lightness(paperColours(mid, 'inner').score)).toBeCloseTo(lightness('#404040') * 0.65, 2);
+  });
 });
 
 describe('fold style', () => {
-  test('xtool laser: red perforations in Cut, Score group empty', () => {
+  test('xtool laser: red perforations in Cut, and no Score group (M1)', () => {
     const doc = parse(svgFor('xtool-laser'));
-    expect(pathsOf(group(doc, 'Score')).length).toBe(0);
+    expect(doc.getElementById('Score')).toBeNull();
     const cut = pathsOf(group(doc, 'Cut'));
     expect(cut.length).toBe(card.inner.holes.length + card.inner.openCuts.length + card.inner.folds.length + 1);
     expect(cut.every((p) => p.getAttribute('stroke') === ATOMM_CUT)).toBe(true);
@@ -139,7 +156,7 @@ describe('fold style', () => {
   });
   test('cricut with foldStyle perforate: perforations in Cut', () => {
     const doc = parse(svgFor('cricut', 'perforate'));
-    expect(pathsOf(group(doc, 'Score')).length).toBe(0);
+    expect(doc.getElementById('Score')).toBeNull();
     expect(pathsOf(group(doc, 'Cut')).length).toBe(card.inner.holes.length + card.inner.openCuts.length + card.inner.folds.length + 1);
   });
   test('xtool laser with foldStyle score: blue engrave in Score', () => {

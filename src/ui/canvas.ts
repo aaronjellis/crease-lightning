@@ -163,7 +163,8 @@ export function createCanvas(createScene: (canvas: HTMLCanvasElement) => SceneLi
       try {
         for (const [i, s] of FOLD_STEPS.entries()) {
           scene.setFoldStep(i);
-          images.push({ step: s.id, png: await scene.renderPng(800, 600, s.theta, 'three-quarter') });
+          // JPEG keeps the how-to PDF small (M13); the PDF embeds either kind.
+          images.push({ step: s.id, png: await scene.renderPng(800, 600, s.theta, 'three-quarter', 'image/jpeg') });
         }
       } catch {
         return [];

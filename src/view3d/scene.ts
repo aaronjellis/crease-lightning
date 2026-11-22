@@ -259,8 +259,11 @@ export class CardScene {
     if (step) this.animateTo(step.theta).catch(reportError);
   }
 
-  /** A still at angle thetaDeg from a stock view, as PNG bytes. Browser only. */
-  async renderPng(width: number, height: number, thetaDeg: number, view: ViewName): Promise<Uint8Array> {
+  /**
+   * A still at angle thetaDeg from a stock view, as PNG bytes (transparent background), or JPEG bytes
+   * on white with `type` 'image/jpeg' (the how-to PDF's stills, a tenth the size). Browser only.
+   */
+  async renderPng(width: number, height: number, thetaDeg: number, view: ViewName, type: 'image/png' | 'image/jpeg' = 'image/png'): Promise<Uint8Array> {
     const status = await this.ready;
     if (!status.ok) throw new Error(`3D preview isn't available in this browser: ${status.error.message}`);
     // Read the runtime after the await: dispose may have run meanwhile. From here to `toBlob` nothing
@@ -288,6 +291,8 @@ export class CardScene {
     this.poseAt(clampTheta(thetaDeg));
     rt.rig.rotation.set(0, 0, 0);
     rt.scene.environment = env.texture;
+    // JPEG has no transparency: paint the background white rather than black.
+    renderer.setClearColor(0xffffff, type === 'image/jpeg' ? 1 : 0);
     renderer.render(rt.scene, camera);
     rt.scene.environment = saved.env;
     rt.rig.rotation.copy(saved.rot);
@@ -296,7 +301,7 @@ export class CardScene {
     // toBlob copies the bitmap when called; only the encoding is async, so a later render or a
     // dispose during the await can't change this still.
     const canvas = renderer.domElement;
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.85));
     if (!blob) throw new Error('The 3D still could not be encoded.');
     return new Uint8Array(await blob.arrayBuffer());
   }

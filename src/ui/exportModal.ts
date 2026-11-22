@@ -5,7 +5,7 @@
  */
 import type { Card } from '../core/build';
 import { slugName } from '../export/slug';
-import { TARGETS, type Target, type TargetFile, type TargetId } from '../export/targets';
+import { stepsFor, TARGETS, type Target, type TargetFile, type TargetId } from '../export/targets';
 import { track } from './context';
 import { h } from './dom';
 import { blockingReasons, exportWarnings } from './exportState';
@@ -111,7 +111,9 @@ export function exportModal(deps: ExportDeps): { el: HTMLDialogElement; open(): 
     if (!chosen) return;
     const t = TARGETS[chosen];
     stepsHead.textContent = EXPORT.stepsHeading(t.label);
-    steps.replaceChildren(...t.steps.map((s) => stepItem(s, slugName(card?.params.line1 ?? ''))));
+    // The steps follow the card: its fold style (M1) and whether it needs the big mat (M9).
+    const name = slugName(card?.params.line1 ?? '');
+    steps.replaceChildren(...(card ? stepsFor(t, card) : []).map((s) => stepItem(s, name)));
     stepsBox.hidden = false;
   };
 

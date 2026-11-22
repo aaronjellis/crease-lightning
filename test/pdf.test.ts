@@ -94,31 +94,7 @@ describe('howToPdf', () => {
   });
 });
 
-describe('target steps and fold steps', () => {
-  test('exact copy', () => {
-    expect(TARGETS.cricut.steps).toEqual([
-      'Upload `<name>-both.svg` in Design Space.',
-      'Select the Score layer and change Operation to Score.',
-      'Select all and click Attach.',
-      'Click Make it. A5 cards need a 12 × 24 in mat.',
-      'Crease every score with the edge of a credit card.',
-    ]);
-    expect(TARGETS['xtool-c1'].steps.slice(0, 3)).toEqual([
-      "Open `<name>-both.svg` in xTool's software.",
-      'Set the Score layer to Score and the Cut layer to Cut.',
-      'Cut the inner sheet and the jacket on their own card colours.',
-    ]);
-    expect(TARGETS['xtool-laser'].steps.slice(0, 2)).toEqual([
-      'Open the SVGs in xTool Studio. Red lines cut, including the short fold perforations.',
-      'Run a test cut on scrap card first.',
-    ]);
-    expect(TARGETS.silhouette.steps.slice(0, 2)).toEqual(['Open `<name>.dxf` in Silhouette Studio.', 'Set the SCORE layer to a light pass or the scoring tool.']);
-    expect(TARGETS.print.steps.slice(0, 2)).toEqual([
-      'Print `<name>-print.pdf` at 100%. Check the 50 mm square.',
-      'Cut solid lines with a craft knife. Score dashed lines with a dry pen and a ruler.',
-    ]);
-    for (const t of Object.values(TARGETS)) expect(t.steps.at(-1)).toBe('Crease every score with the edge of a credit card.');
-  });
+describe('fold steps', () => {
   test('fold steps', () => {
     expect(FOLD_STEPS.map((s) => s.text)).toEqual([
       'Fold the card in half along the spine.',

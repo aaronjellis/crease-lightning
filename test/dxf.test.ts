@@ -18,11 +18,20 @@ describe('pieceDxf', () => {
   beforeAll(() => {
     dxf = pieceDxf(card.inner, TARGETS.silhouette);
   });
-  test('declares mm units and both layers', () => {
-    expect(dxf).toMatch(/\$INSUNITS\s+70\s+4\b/);
+  test('strict R12: AC1009, no $INSUNITS, an LTYPE table defining CONTINUOUS, both layers (M4)', () => {
+    expect(dxf).toMatch(/\$ACADVER\s+1\s+AC1009\b/);
+    expect(dxf).not.toContain('$INSUNITS');
+    expect(dxf).toMatch(/0\s+TABLE\s+2\s+LTYPE\s+70\s+1\s+0\s+LTYPE\s+2\s+CONTINUOUS\b/);
+    // The line type is defined before the layers that use it.
+    expect(dxf.indexOf('2\nLTYPE')).toBeLessThan(dxf.indexOf('2\nLAYER'));
     expect(dxf).toMatch(/2\s+CUT\b/);
     expect(dxf).toMatch(/2\s+SCORE\b/);
     expect(dxf.trimEnd().endsWith('EOF')).toBe(true);
+  });
+  test('a perforated piece has no SCORE layer', () => {
+    const perf = pieceDxf(card.inner, { ...TARGETS.silhouette, fold: 'perforate' });
+    expect(perf).not.toMatch(/\bSCORE\b/);
+    expect(perf).toMatch(/2\s+LAYER\s+70\s+1\b/);
   });
   test('one polyline per path', () => {
     const p = card.inner;

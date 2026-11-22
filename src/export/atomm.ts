@@ -28,7 +28,7 @@ export function atommExportFiles(card: Card, intent: AtommIntent, images: { step
   if (intent === 'openInStudio') return files;
   files.push(
     { filename: `${name}.json`, blob: new Blob([saveJson(card.params)], { type: 'application/json' }) },
-    { filename: `${name}-how-to.pdf`, blob: new Blob([howToPdf(card, target, images, name) as BlobPart], { type: 'application/pdf' }) }
+    { filename: `${name}-how-to.pdf`, blob: new Blob([howToPdf(card, t, images, name) as BlobPart], { type: 'application/pdf' }) }
   );
   return files;
 }

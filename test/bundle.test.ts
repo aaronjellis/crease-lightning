@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { build, type Card } from '../src/core/build';
 import { defaultParams } from '../src/core/model';
 import { exportBundle, slugName } from '../src/export/bundle';
-import { TARGETS } from '../src/export/targets';
+import { stepsFor, TARGETS } from '../src/export/targets';
 import { testFonts } from './helpers/fonts';
 
 let card: Card;
@@ -44,7 +44,7 @@ describe('file names in the steps', () => {
     for (const t of Object.values(TARGETS)) {
       const { blob } = exportBundle(card, t, { name: 'Mary Kate!' });
       const files = Object.keys(unzipSync(new Uint8Array(await blob.arrayBuffer())));
-      for (const step of t.steps) {
+      for (const step of stepsFor(t, card)) {
         for (const m of step.matchAll(/`<name>([^`]+)`/g)) expect(files, `${t.id}: ${step}`).toContain(`mary-kate${m[1]}`);
       }
     }
