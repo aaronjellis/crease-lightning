@@ -38,8 +38,15 @@ export interface View {
   render(p: Params, card: Card | null, state: BuildState): void;
 }
 
+let analyticsOff = false;
+/** Events are labs-only: the Atomm host turns them off for good (R27). */
+export function setAnalytics(on: boolean): void {
+  analyticsOff = !on;
+}
+
 /** Sends a custom PostHog event when the loader is on the page. Never carries message text. */
 export function track(event: string, props: Record<string, string | number | boolean> = {}): void {
+  if (analyticsOff) return;
   const ph = (globalThis as { posthog?: { capture(e: string, p: object): void } }).posthog;
   ph?.capture(event, { project: 'crease-lightning', ...props });
 }

@@ -19,7 +19,7 @@ import { checksCard } from './cards/checks';
 import { decorationsCard } from './cards/decorations';
 import { fontCard } from './cards/font';
 import { messageCard } from './cards/message';
-import { FontLoader, type BuildState, type Ctx, type Host, type SceneLike, type View } from './context';
+import { FontLoader, setAnalytics, type BuildState, type Ctx, type Host, type SceneLike, type View } from './context';
 import { h, svgFrom } from './dom';
 import { exportModal } from './exportModal';
 import { exportNote } from './exportState';
@@ -88,6 +88,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
     saveBlob: downloadBlob,
     ...deps,
   };
+  setAnalytics(host !== 'atomm');
   const previewTarget = host === 'atomm' ? 'laser' : 'blade';
   const fonts = new FontLoader(d.loadFont);
   const start = initialParams(d);

@@ -26,8 +26,28 @@ export const pickLocale = (code: unknown): string => {
   return LOCALES.includes(base) ? base : 'en';
 };
 
-const root = document.getElementById('app');
-if (root) {
+/** Gives up on a call after `ms`, so a platform that never answers can't hold up the page. */
+const within = <T>(p: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timed out')), ms))]);
+
+/** The platform's language, read once before the first render; any failure keeps English (R28). */
+async function platformLocale(): Promise<string> {
+  try {
+    const sdk = window.atomm ?? (document.readyState === 'complete' ? undefined : await within(new Promise<AtommSdk | undefined>((r) => addEventListener('load', () => r(window.atomm), { once: true })), 1500));
+    return pickLocale(await within(Promise.resolve().then(() => sdk?.app?.getLocale?.()), 1500));
+  } catch {
+    return 'en';
+  }
+}
+
+async function main() {
+  const root = document.getElementById('app');
+  if (!root) return;
+  document.documentElement.lang = await platformLocale();
+  start(root);
+}
+
+function start(root: HTMLElement) {
   const app = mountApp(root, 'atomm');
 
   /** One export-ready card and its fold-step pictures, built from the design as it is now. */
@@ -58,11 +78,9 @@ if (root) {
   });
 
   const register = () =>
-    window.atomm?.lifecycle.on('export', async ({ intent }) => files(intent === 'openInStudio' ? 'openInStudio' : 'download'));
+    window.atomm?.lifecycle?.on('export', async ({ intent }) => files(intent === 'openInStudio' ? 'openInStudio' : 'download'));
   if (window.atomm) register();
   else addEventListener('load', register, { once: true });
-
-  void Promise.resolve(window.atomm?.app?.getLocale?.())
-    .then((code) => (document.documentElement.lang = pickLocale(code)))
-    .catch(() => undefined);
 }
+
+void main();

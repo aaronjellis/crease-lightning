@@ -30,11 +30,19 @@ describe('atommExportFiles', () => {
     ]);
   });
 
-  test('every SVG uses only the two Atomm colours', async () => {
-    for (const f of atommExportFiles(card, 'download').filter((x) => x.filename.endsWith('.svg'))) {
-      const colours = new Set([...(await text(f.blob)).matchAll(/stroke="(#[0-9a-fA-F]{6})"/g)].map((m) => m[1].toUpperCase()));
-      expect(colours.size).toBeGreaterThan(0);
-      for (const c of colours) expect([ATOMM_CUT, ATOMM_ENGRAVE]).toContain(c);
+  test('every Atomm SVG uses only the two Atomm colours and no banned features', async () => {
+    const scored = build({ ...card.params, advanced: { ...card.params.advanced, foldStyle: 'score' } }, { fonts: testFonts() }, 'laser', { strokeCheck: false });
+    const banned = [/<defs/i, /<use[\s>]/i, /transform=/i, /clipPath/i, /<mask/i, /stroke-dasharray/i, /<style/i, /class=/i];
+    for (const c of [card, scored]) {
+      for (const intent of ['openInStudio', 'download'] as const) {
+        for (const f of atommExportFiles(c, intent).filter((x) => x.filename.endsWith('.svg'))) {
+          const svg = await text(f.blob);
+          const hex = new Set([...svg.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((m) => m[0].toUpperCase()));
+          expect(hex.size).toBeGreaterThan(0);
+          for (const h of hex) expect([ATOMM_CUT, ATOMM_ENGRAVE], f.filename).toContain(h);
+          for (const re of banned) expect(svg, `${f.filename} ${re}`).not.toMatch(re);
+        }
+      }
     }
   });
 
