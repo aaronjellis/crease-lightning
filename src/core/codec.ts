@@ -1,3 +1,4 @@
+import { WEB_MM } from './constants';
 import { THEME_IDS, type FoldStyle, type Params, type Spacing, type StepDims } from './model';
 
 const SIZES = ['5x7', 'a2', 'a6', 'a5'] as const;
@@ -44,7 +45,7 @@ export function migrate(raw: unknown): Params | null {
   const a = raw.advanced;
   if (!isObj(a)) return null;
   const overhangMm = num(a.overhangMm, 0, 6);
-  const railMm = num(a.railMm, 0, 20);
+  const railMm = num(a.railMm, WEB_MM, 20);
   const clearanceMm = num(a.clearanceMm, 0, 10);
   if (overhangMm === null || railMm === null || clearanceMm === null) return null;
   if (!FOLDS.includes(a.foldStyle as FoldStyle)) return null;

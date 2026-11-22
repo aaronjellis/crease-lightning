@@ -37,7 +37,7 @@ describe('codec', () => {
     const q = migrate(raw)!;
     expect(q).not.toBeNull();
     expect(q.advanced.overhangMm).toBe(6);
-    expect(q.advanced.railMm).toBeGreaterThanOrEqual(0);
+    expect(q.advanced.railMm).toBe(3);
     expect('extra' in q).toBe(false);
   });
   test('migrate rejects wrong field types', () => {

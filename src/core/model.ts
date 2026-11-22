@@ -108,19 +108,16 @@ export function defaultParams(locale: string): Params {
 }
 
 /**
- * Switch theme. A line is replaced only when untouched: it equals the previous
- * theme's default line (prev defaults to Birthday when p.theme is 'birthday',
- * otherwise a line counts as untouched only when empty). Fixes are recomputed
- * for the new geometry, so overrides clear.
+ * Switch theme. A line is replaced only when untouched: it equals prev's default
+ * line (prev is the current theme's defaults), so a cleared line stays empty.
+ * Fixes are recomputed for the new geometry, so overrides clear.
  */
-export function applyTheme(p: Params, next: ThemeDefaults, prev?: ThemeDefaults): Params {
-  const before = prev ?? (p.theme === 'birthday' ? BIRTHDAY_DEFAULTS : undefined);
-  const untouched = (line: string, i: 0 | 1) => line === '' || (before !== undefined && line === before.lines[i]);
+export function applyTheme(p: Params, next: ThemeDefaults, prev: ThemeDefaults): Params {
   return {
     ...p,
     theme: next.id,
-    line1: untouched(p.line1, 0) ? next.lines[0] : p.line1,
-    line2: untouched(p.line2, 1) ? next.lines[1] : p.line2,
+    line1: p.line1 === prev.lines[0] ? next.lines[0] : p.line1,
+    line2: p.line2 === prev.lines[1] ? next.lines[1] : p.line2,
     font: next.font,
     colours: { ...next.colours },
     overrides: {},
