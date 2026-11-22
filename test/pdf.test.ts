@@ -15,10 +15,25 @@ const text = (b: Uint8Array) => new TextDecoder('latin1').decode(b);
 const pages = (b: Uint8Array) => (text(b).match(/\/Type\s*\/Page\b/g) ?? []).length;
 
 describe('printPdf', () => {
-  test('is a 2-page PDF on 5x7', () => {
+  test('is a 3-page PDF on 5x7 (check page, inner, jacket)', () => {
     const pdf = printPdf(card);
     expect(text(pdf).startsWith('%PDF')).toBe(true);
-    expect(pages(pdf)).toBe(2);
+    expect(pages(pdf)).toBe(3);
+  });
+  test('piece pages draw no text or boxes inside the sheet outline', () => {
+    const k = 72 / 25.4;
+    const streams = [...text(printPdf(card)).matchAll(/stream\n([\s\S]*?)endstream/g)].map((m) => m[1]);
+    expect(streams.length).toBe(3);
+    expect(streams[0]).toMatch(/ re\n/); // the check square
+    [card.inner, card.jacket].forEach((piece, n) => {
+      const s = streams[n + 1];
+      const page = pageFor(card.params.size, piece.widthMm, piece.heightMm);
+      const sheetTopPdf = (page.h - mapPoint(piece, page, { x: 0, y: piece.heightMm }).y) * k;
+      expect(s).not.toMatch(/ re\n/);
+      const ys = [...s.matchAll(/([\d.]+) ([\d.]+) Td/g)].map((m) => Number(m[2]));
+      expect(ys.length).toBeGreaterThan(0);
+      for (const y of ys) expect(y).toBeGreaterThan(sheetTopPdf);
+    });
   });
   test('paper by size, landscape when wider than tall', () => {
     expect(pageFor('5x7', 500, 100)).toMatchObject({ w: 279.4, h: 215.9 });

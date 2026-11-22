@@ -61,59 +61,10 @@ function drawPiece(doc: Doc, piece: Piece, page: Page) {
   doc.setLineDashPattern([], 0);
 }
 
-/** Points along every drawn path (about every 2 mm), in page mm. */
-function samples(piece: Piece, page: Page): Pt[] {
-  const paths: Pt[][] = [
-    ...piece.outline.map((c) => [...c, c[0]]),
-    ...piece.holes.flatMap((h) => h.map((c) => [...c, c[0]])),
-    ...piece.openCuts,
-    ...piece.folds.map((f) => f.path),
-  ];
-  const out: Pt[] = [];
-  for (const path of paths) {
-    const pts = path.map((p) => mapPoint(piece, page, p));
-    for (let i = 1; i < pts.length; i++) {
-      const n = Math.max(1, Math.ceil(Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) / 2));
-      for (let k = 0; k <= n; k++) out.push({ x: pts[i - 1].x + ((pts[i].x - pts[i - 1].x) * k) / n, y: pts[i - 1].y + ((pts[i].y - pts[i - 1].y) * k) / n });
-    }
-  }
-  return out;
-}
-
-/** Where the 50 mm check square goes: the page position that touches the fewest drawn lines (none when there is room). */
-export function checkSquareAt(piece: Piece, page: Page): Pt {
-  const CELL = 5;
-  const cols = Math.ceil(page.w / CELL);
-  const marked = new Set<number>();
-  for (const p of samples(piece, page)) marked.add(Math.floor(p.y / CELL) * cols + Math.floor(p.x / CELL));
-  const span = CHECK_MM / CELL;
-  let best: Pt = { x: MARGIN, y: HEADER_MM };
-  let bestHits = Infinity;
-  for (let y = HEADER_MM; y + CHECK_MM <= page.h - MARGIN; y += CELL) {
-    for (let x = MARGIN; x + CHECK_MM <= page.w - MARGIN; x += CELL) {
-      let hits = 0;
-      for (let r = -1; r <= span; r++) for (let c = -1; c <= span; c++) if (marked.has((Math.floor(y / CELL) + r) * cols + Math.floor(x / CELL) + c)) hits++;
-      if (hits < bestHits) {
-        bestHits = hits;
-        best = { x, y };
-      }
-    }
-  }
-  return best;
-}
-
-function drawChrome(doc: Doc, piece: Piece, page: Page, title: string) {
-  const { x: sx, y: sy } = checkSquareAt(piece, page);
+/** The title and legend, in the top margin (above the sheet; mapPoint keeps the sheet below HEADER_MM). */
+function drawHeader(doc: Doc, title: string) {
   doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'normal');
-  doc.setLineDashPattern([], 0);
-  doc.setLineWidth(0.2);
-  doc.setDrawColor(0, 0, 0);
-  doc.rect(sx, sy, CHECK_MM, CHECK_MM);
-  doc.setFontSize(8);
-  doc.text(['Check square', '50 \u00d7 50 mm', 'Print at 100%'], sx + CHECK_MM / 2, sy + CHECK_MM / 2 - 3, { align: 'center' });
-
-  // Title and legend on one header band at the top.
   doc.setFontSize(10);
   doc.text(title, MARGIN, 8);
   doc.setFontSize(8);
@@ -124,6 +75,7 @@ function drawChrome(doc: Doc, piece: Piece, page: Page, title: string) {
   ];
   let x = MARGIN;
   for (const [label, dash, grey] of rows) {
+    doc.setLineWidth(0.2);
     doc.setDrawColor(grey);
     doc.setLineDashPattern(dash, 0);
     doc.line(x, 13, x + 16, 13);
@@ -133,18 +85,32 @@ function drawChrome(doc: Doc, piece: Piece, page: Page, title: string) {
   }
 }
 
-/** One page per piece (inner, then jacket), geometry at 100%. */
+/** Page 1: title, legend, the 50 mm check square, and the print instruction. Nothing here touches a sheet. */
+function drawCheckPage(doc: Doc, page: Page) {
+  drawHeader(doc, 'Crease Lightning: print check');
+  const sx = (page.w - CHECK_MM) / 2;
+  const sy = HEADER_MM + 20;
+  doc.setLineWidth(0.2);
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineDashPattern([], 0);
+  doc.rect(sx, sy, CHECK_MM, CHECK_MM);
+  doc.setFontSize(11);
+  doc.text('Print at 100%. This square must measure 50 mm.', page.w / 2, sy + CHECK_MM + 12, { align: 'center' });
+}
+
+/** Page 1 is the check page; then one page per piece (inner, then jacket), geometry at 100%. */
 export function printPdf(card: Card): Uint8Array {
   const { size } = card.params;
   const pieces = [card.inner, card.jacket];
-  const first = pageFor(size, pieces[0].widthMm, pieces[0].heightMm);
-  const doc = new jsPDF({ unit: 'mm', format: [first.w, first.h], orientation: first.w > first.h ? 'landscape' : 'portrait' });
-  pieces.forEach((piece, i) => {
+  const check = pageFor(size, 0, 1);
+  const doc = new jsPDF({ unit: 'mm', format: [check.w, check.h], orientation: 'portrait' });
+  drawCheckPage(doc, check);
+  for (const piece of pieces) {
     const page = pageFor(size, piece.widthMm, piece.heightMm);
-    if (i > 0) doc.addPage([page.w, page.h], page.w > page.h ? 'landscape' : 'portrait');
+    doc.addPage([page.w, page.h], page.w > page.h ? 'landscape' : 'portrait');
     drawPiece(doc, piece, page);
-    drawChrome(doc, piece, page, `Crease Lightning: ${piece.id === 'inner' ? 'inner sheet' : 'jacket'} (print at 100%)`);
-  });
+    drawHeader(doc, `Crease Lightning: ${piece.id === 'inner' ? 'inner sheet' : 'jacket'}`);
+  }
   return new Uint8Array(doc.output('arraybuffer'));
 }
 
