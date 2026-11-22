@@ -56,6 +56,8 @@ export const FLAT = {
   perforated: 'Perforated fold',
   showThrough: 'Jacket shows through',
   label: (what: string, w: number, h: number) => `${what}, ${Math.round(w)} × ${Math.round(h)} mm`,
+  editHint: 'Drag an illustration to move it. Select one, then use the arrow keys to move it, + and − to resize it, or Delete to remove it.',
+  resize: 'Resize illustration',
 };
 
 export const MESSAGE = {

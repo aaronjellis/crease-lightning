@@ -179,7 +179,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   const rail = themeRail(ctx);
   const cards = [messageCard(ctx), cardCard(ctx), fontCard(ctx), decorationsCard(ctx), checksCard(ctx), advancedCard(ctx)];
   const views: View[] = [rail, ...cards];
-  const canvas = createCanvas(d.createScene);
+  const canvas = createCanvas(d.createScene, ctx);
 
   /** Builds from the params current when the build finishes, never a snapshot from before a change. */
   const prepareExport = async (kind: 'blade' | 'laser' = previewTarget): Promise<Card> => {
@@ -248,6 +248,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   // ---------------------------------------------------------------- builds
   const renderAll = () => {
     for (const v of views) v.render(params, card, state);
+    canvas.showSelection();
     renderExport();
   };
 

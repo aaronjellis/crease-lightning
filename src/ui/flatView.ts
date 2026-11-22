@@ -3,13 +3,17 @@
  * `pieceSvg` in preview mode. Each sheet sits on its paper colour; holes show the jacket colour, as
  * they will in the finished card. Cuts are solid, valley folds dashed, mountain folds dash-dot (the
  * print PDF's convention).
+ *
+ * The inner sheet is where decorations are edited (`flatEdit.ts`); the jacket is read-only.
  */
 import type { Card } from '../core/build';
 import type { Piece } from '../core/flatten';
 import type { FoldStyle } from '../core/model';
 import { pieceSvg, withFoldStyle } from '../export/svg';
 import { TARGETS } from '../export/targets';
+import type { Ctx } from './context';
 import { h, svgFrom } from './dom';
+import { decorEditor, FLAT_HINT_ID } from './flatEdit';
 import { FLAT } from './strings';
 
 /**
@@ -43,7 +47,7 @@ export function sheetSvg(piece: Piece, paper: string, foldStyle: FoldStyle = 'au
 const legendLine = (kind: string, label: string) =>
   h('li', {}, svgFrom(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 6" aria-hidden="true"><line x1="1" y1="3" x2="27" y2="3" data-legend="${kind}"/></svg>`), label);
 
-export function flatView(): { el: HTMLElement; render(card: Card): void } {
+export function flatView(ctx: Ctx): { el: HTMLElement; render(card: Card): void; showSelection(): void } {
   const sheets = h('div', { class: 'flat-sheets' });
   const legend = h(
     'ul',
@@ -55,6 +59,7 @@ export function flatView(): { el: HTMLElement; render(card: Card): void } {
     h('li', {}, h('span', { class: 'swatch-hole', 'aria-hidden': 'true' }), FLAT.showThrough)
   );
   const el = h('div', { class: 'flat-view' }, sheets, legend);
+  const editor = decorEditor(ctx);
 
   return {
     el,
@@ -62,16 +67,24 @@ export function flatView(): { el: HTMLElement; render(card: Card): void } {
       const { inner, jacket } = card.params.colours;
       const perforated = previewTarget(card.params.advanced.foldStyle).fold === 'perforate';
       legend.dataset.folds = perforated ? 'perforate' : 'score';
-      const figure = (piece: Piece, paper: string, label: string) => {
+      const figure = (piece: Piece, paper: string, label: string, sheet: 'inner' | 'jacket') => {
         const svg = svgFrom(sheetSvg(piece, paper, card.params.advanced.foldStyle));
         svg.setAttribute('role', 'img');
         svg.setAttribute('aria-label', FLAT.label(label, piece.widthMm, piece.heightMm));
         svg.removeAttribute('width');
         svg.removeAttribute('height');
-        return h('figure', { class: 'sheet' }, svg, h('figcaption', { text: FLAT.label(label, piece.widthMm, piece.heightMm) }));
+        const hint = sheet === 'inner' && card.decor.items.length ? h('span', { class: 'sheet-hint', id: FLAT_HINT_ID, text: FLAT.editHint }) : null;
+        const fig = h('figure', { class: 'sheet', 'data-sheet': sheet }, svg, h('figcaption', {}, h('span', { text: FLAT.label(label, piece.widthMm, piece.heightMm) }), hint));
+        fig.style.setProperty('--sheet-ink', inkOn(paper));
+        fig.style.setProperty('--sheet-paper', paper);
+        return { fig, svg };
       };
       el.style.setProperty('--show-through', jacket);
-      sheets.replaceChildren(figure(card.inner, inner, FLAT.inner), figure(card.jacket, jacket, FLAT.jacket));
+      const innerSheet = figure(card.inner, inner, FLAT.inner, 'inner');
+      const refocus = editor.focused();
+      sheets.replaceChildren(innerSheet.fig, figure(card.jacket, jacket, FLAT.jacket, 'jacket').fig);
+      editor.attach(innerSheet.svg, card, refocus);
     },
+    showSelection: () => editor.showSelection(),
   };
 }
