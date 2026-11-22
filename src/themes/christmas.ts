@@ -12,8 +12,8 @@ export const christmas: Theme = {
       name: 'Holly',
       border: null,
       items: [
-        { icon: 'snowflake', count: 4, minMm: 16, maxMm: 20 },
-        { icon: 'star', count: 4, minMm: 9, maxMm: 13 },
+        { icon: 'holly', count: 3, minMm: 18, maxMm: 22 },
+        { icon: 'gift', count: 2, minMm: 18, maxMm: 22 },
       ],
     },
     {
@@ -21,8 +21,8 @@ export const christmas: Theme = {
       name: 'Snow',
       border: 'snow-row',
       items: [
-        { icon: 'tree', count: 3, minMm: 14, maxMm: 18 },
-        { icon: 'star', count: 2, minMm: 9, maxMm: 12 },
+        { icon: 'tree', count: 3, minMm: 12, maxMm: 16 },
+        { icon: 'snowflake', count: 2, minMm: 14, maxMm: 18 },
       ],
     },
   ],

@@ -11,6 +11,8 @@ export interface Icon {
   minHeightMm: number;
   /** The size range, in mm, an icon added from the picker starts with. The low end is at least `minHeightMm`. */
   defaultMm: [number, number];
+  /** The themes the icon suits, plus `everyday`: the Add picker's groups. */
+  themes: (ThemeId | 'everyday')[];
   source: string;
   licence: string;
 }

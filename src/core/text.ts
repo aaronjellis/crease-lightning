@@ -31,9 +31,9 @@ export interface Block {
   bridgeBars: BridgeBar[];
 }
 
-/** One bridge bar: `down` drops to the part below; `left` and `right` reach sideways. */
+/** One bridge bar: `down` drops to the part below; `left` and `right` reach sideways; `up` (icons only) climbs. */
 export interface BridgeBar {
-  dir: 'down' | 'left' | 'right';
+  dir: Dir;
   bar: Poly;
 }
 
@@ -484,7 +484,7 @@ function inside(p: Pt, c: Pt[]): boolean {
 }
 
 /** Splits a poly into its pieces: each outer contour with the holes inside it. */
-function components(poly: Poly): Poly[] {
+export function components(poly: Poly): Poly[] {
   const outers = poly.filter((c) => signedArea(c) > 0).map((c) => ({ c, a: signedArea(c), holes: [] as Pt[][] }));
   for (const h of poly.filter((c) => signedArea(c) < 0)) {
     const host = outers.filter((o) => inside(h[0], o.c)).sort((x, y) => x.a - y.a)[0];
@@ -505,10 +505,11 @@ function crossings(poly: Poly, x: number): number[] {
   return out.sort((p, q) => p - q);
 }
 
-type Dir = 'down' | 'left' | 'right';
+type Dir = 'down' | 'left' | 'right' | 'up';
 /** Maps a direction onto "down" (toward −y) and back. */
 const AXES: Record<Dir, { to: (p: Pt) => Pt; from: (p: Pt) => Pt }> = {
   down: { to: (p) => p, from: (p) => p },
+  up: { to: (p) => ({ x: p.x, y: -p.y }), from: (p) => ({ x: p.x, y: -p.y }) },
   left: { to: (p) => ({ x: p.y, y: p.x }), from: (p) => ({ x: p.y, y: p.x }) },
   right: { to: (p) => ({ x: p.y, y: -p.x }), from: (p) => ({ x: -p.y, y: p.x }) },
 };
@@ -570,6 +571,22 @@ function findBar(f: Poly, others: Poly, dir: Dir, width: number, reach: number, 
   ].map(ax.from);
   if (signedArea(corners) < 0) corners.reverse();
   return { dir, bar: [corners], gap: best.gap };
+}
+
+/**
+ * The shortest straight bar `width` wide that joins piece `f` to `others`, trying all four
+ * directions, or null when none lands. Icons use it to hang paper islands on the sheet round them.
+ */
+export function shortestBar(f: Poly, others: Poly, width: number): Poly | null {
+  // Strict bars first (both sides of the bar land on paper); loose ones only as a last resort.
+  for (const strict of [true, false]) {
+    const bars = (['down', 'up', 'left', 'right'] as const)
+      .map((dir) => findBar(f, others, dir, width, Infinity, strict))
+      .filter((b) => b !== null)
+      .sort((p, q) => p.gap - q.gap);
+    if (bars.length) return bars[0].bar;
+  }
+  return null;
 }
 
 /**

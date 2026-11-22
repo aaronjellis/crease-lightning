@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { decodeLink, encodeLink, loadJson, migrate, saveJson } from '../src/core/codec';
 import { defaultParams, type Params } from '../src/core/model';
 import { decorFromStyle } from '../src/core/decor/model';
-import { themeById } from '../src/themes';
+import { iconById, themeById } from '../src/themes';
 
 /** A version 1 card, as links and files saved before decorations carried them. */
 function v1(over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -131,7 +131,7 @@ describe('migrate version 2 validates the decor', () => {
   });
   test('sizes are clamped to the icon minimum and 60 mm', () => {
     const [a] = withDecor({ ...p.decor, items: [item({ icon: 'balloon', minMm: 2, maxMm: 100, sizeMm: 99 })] })!.decor.items;
-    expect(a).toMatchObject({ minMm: 18, maxMm: 60, sizeMm: 60 });
+    expect(a).toMatchObject({ minMm: iconById('balloon').minHeightMm, maxMm: 60, sizeMm: 60 });
     const [b] = withDecor({ ...p.decor, items: [item({ minMm: 20, maxMm: 10, sizeMm: 1 })] })!.decor.items;
     expect(b.minMm).toBe(20);
     expect(b.maxMm).toBe(20);
@@ -172,7 +172,7 @@ describe('migrate version 2 validates the decor', () => {
         border: 'confetti-row',
         seed: 4242,
         items: [
-          { id: 'i1', icon: 'confetti', minMm: 9, maxMm: 14, sizeMm: 11.5, at: { page: 'back', u: 0.25, v: 0.75 } },
+          { id: 'i1', icon: 'confetti', minMm: 10, maxMm: 14, sizeMm: 11.5, at: { page: 'back', u: 0.25, v: 0.75 } },
           { id: 'i2', icon: 'star', minMm: 9, maxMm: 13 },
           { id: 'i7', icon: 'balloon', minMm: 18, maxMm: 22, at: { page: 'base', u: 1, v: 0 } },
         ],

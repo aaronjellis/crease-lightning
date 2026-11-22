@@ -12,7 +12,7 @@ export const love: Theme = {
       name: 'Hearts',
       border: null,
       items: [
-        { icon: 'heart', count: 5, minMm: 9, maxMm: 14 },
+        { icon: 'heart', count: 5, minMm: 8, maxMm: 12 },
         { icon: 'sparkle-star', count: 4, minMm: 9, maxMm: 13 },
       ],
     },
@@ -21,8 +21,18 @@ export const love: Theme = {
       name: 'Sweethearts',
       border: 'heart-row',
       items: [
-        { icon: 'heart-stand', count: 3, minMm: 10, maxMm: 14 },
-        { icon: 'heart', count: 4, minMm: 9, maxMm: 12 },
+        { icon: 'heart-stand', count: 3, minMm: 15, maxMm: 19 },
+        { icon: 'heart', count: 4, minMm: 8, maxMm: 12 },
+      ],
+    },
+    {
+      id: 'roses',
+      name: 'Tulips',
+      border: 'scallop-edge',
+      items: [
+        { icon: 'flower-tulip', count: 3, minMm: 22, maxMm: 26 },
+        { icon: 'heart-straight', count: 3, minMm: 8, maxMm: 12 },
+        { icon: 'mail', count: 1, minMm: 16, maxMm: 20 },
       ],
     },
   ],

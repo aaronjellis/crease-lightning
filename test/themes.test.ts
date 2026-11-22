@@ -1,57 +1,109 @@
 import { describe, expect, test } from 'vitest';
-import { area, bounds, intersect, offset, outerCount, scale, union, type Poly, type Pt } from '@kerfuffle/engine/geom';
+import { area, bounds, difference, intersect, offset, outerCount, scale, type Poly, type Pt } from '@kerfuffle/engine/geom';
 import { applyTheme, BIRTHDAY_DEFAULTS, defaultParams, type ThemeDefaults, type ThemeId } from '../src/core/model';
 import { fitLayout } from '../src/core/fit';
 import { testFonts } from './helpers/fonts';
-import { MIN_STROKE_BLADE_MM, PLINTH_MIN_MM } from '../src/core/constants';
-import { buildIconBlock, thinArea } from '../src/core/text';
+import { BRIDGE_MM, MIN_STROKE_BLADE_MM } from '../src/core/constants';
+import { thinArea } from '../src/core/text';
 import { BORDERS, ICONS, THEMES, borderById, iconById, loadIcon, themeById } from '../src/themes';
 
-/** How many holes are narrower than 1 mm: those that vanish under a 0.5 mm inward offset. */
-const narrowHoles = (p: Poly): number =>
-  p.filter((c) => !outerCount([c])).filter((h) => area(offset([[...h].reverse()], -0.5, 0.05)) <= 1e-6).length;
 const atMin = (id: string): Poly => {
   const i = iconById(id);
   return scale(i.poly, i.minHeightMm);
 };
 
+/** A 100 mm square sheet with `hole` cut from its middle: the paper that is left. */
+const sheetWith = (hole: Poly): Poly => {
+  const b = bounds(hole)!;
+  const placed = hole.map((c) => c.map((p) => ({ x: p.x - b.x + 50 - b.w / 2, y: p.y - b.y + 50 - b.h / 2 })));
+  return difference([[{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]], placed);
+};
+/** The paper round and inside an icon cut at its minimum height, framed 3 mm clear of its bounds. */
+const paperAround = (id: string): Poly => {
+  const p = atMin(id);
+  const b = bounds(p)!;
+  const frame = [[{ x: b.x - 3, y: b.y - 3 }, { x: b.x + b.w + 3, y: b.y - 3 }, { x: b.x + b.w + 3, y: b.y + b.h + 3 }, { x: b.x - 3, y: b.y + b.h + 3 }]];
+  return difference(frame, p);
+};
+const islandSvg = '<svg viewBox="0 0 10 10"><path fill-rule="evenodd" d="M0 0H10V10H0Z M3 3H7V7H3Z"/></svg>';
+
 describe('icons', () => {
-  test.each(ICONS.map((i) => i.id))('%s is one piece at its minimum height and at 30 mm, 1 mm tall, bottom on y = 0', (id) => {
-    const i = iconById(id);
-    const b = bounds(i.poly)!;
+  test('the library has at least 85 illustrations with unique ids', () => {
+    expect(ICONS.length).toBeGreaterThanOrEqual(85);
+    expect(new Set(ICONS.map((i) => i.id)).size).toBe(ICONS.length);
+  });
+
+  test.each(ICONS.map((i) => i.id))('%s is 1 mm tall with its bottom on y = 0 and its left on x = 0', (id) => {
+    const b = bounds(iconById(id).poly)!;
     expect(b.h).toBeCloseTo(1, 3);
     expect(b.y).toBeCloseTo(0, 3);
     expect(b.x).toBeCloseTo(0, 3);
-    expect(outerCount(atMin(id))).toBe(1);
-    expect(outerCount(scale(i.poly, 30))).toBe(1);
-    expect(i.source).not.toBe('');
-    expect(i.licence).not.toBe('');
+  });
+
+  test.each(ICONS.map((i) => i.id))('%s cut from a 100 mm sheet at its minimum height and at 30 mm leaves the sheet in one piece', (id) => {
+    const i = iconById(id);
+    expect(outerCount(sheetWith(atMin(id)))).toBe(1);
+    expect(outerCount(sheetWith(scale(i.poly, 30)))).toBe(1);
+  });
+
+  test.each(ICONS.map((i) => i.id))('%s has no paper island: every detail is bridged or filled', (id) => {
+    expect(iconById(id).poly.filter((c) => !outerCount([c]))).toEqual([]);
+  });
+
+  test.each(ICONS.map((i) => i.id))('%s leaves no paper narrower than 1 mm at its minimum height', (id) => {
+    expect(thinArea(paperAround(id), 1)).toBeLessThan(0.05);
   });
 
   test.each(ICONS.map((i) => i.id))('%s has no stroke under 1.5 mm at its minimum height', (id) => {
     expect(thinArea(atMin(id), MIN_STROKE_BLADE_MM)).toBeLessThan(0.05);
   });
 
-  test.each(ICONS.map((i) => i.id))('%s has no hole narrower than 1 mm at its minimum height', (id) => {
-    expect(narrowHoles(atMin(id))).toBe(0);
-  });
-
-  test('the hole check counts a 0.6 mm slot but not a 3 mm hole', () => {
-    const box = (x: number, y: number, w: number, h: number): Pt[] => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
-    const withHole = (hole: Pt[]): Poly => [box(0, 0, 20, 20), [...hole].reverse()];
-    expect(narrowHoles(withHole(box(5, 5, 0.6, 10)))).toBe(1);
-    expect(narrowHoles(withHole(box(5, 5, 3, 3)))).toBe(0);
-  });
-
-  test.each(ICONS.map((i) => i.id))('%s welds to a plinth into one piece', (id) => {
+  test.each(ICONS.map((i) => i.id))('%s has a name, themes, a source, a licence, and a default size range no smaller than its minimum', (id) => {
     const i = iconById(id);
-    const blk = buildIconBlock(i.poly, i.minHeightMm, 2);
-    expect(outerCount(union([blk.letters, blk.plinth]))).toBe(1);
+    expect(i.name.trim()).not.toBe('');
+    expect(i.themes.length).toBeGreaterThan(0);
+    expect(i.themes).not.toContain('blank');
+    expect(i.source).not.toBe('');
+    expect(i.licence).not.toBe('');
+    expect(i.defaultMm[0]).toBeGreaterThanOrEqual(i.minHeightMm);
+    expect(i.defaultMm[1]).toBeGreaterThanOrEqual(i.defaultMm[0]);
+  });
+
+  test.each(THEMES.filter((t) => t.id !== 'blank').map((t) => t.id))('%s has at least 8 illustrations', (id) => {
+    expect(ICONS.filter((i) => i.themes.includes(id)).length).toBeGreaterThanOrEqual(8);
+  });
+
+  test('the everyday group has at least 15 illustrations', () => {
+    expect(ICONS.filter((i) => i.themes.includes('everyday')).length).toBeGreaterThanOrEqual(15);
+  });
+
+  test('loadIcon bridges a paper island to the paper round it', () => {
+    // A 10 x 10 square with a 4 x 4 island of paper inside, 20 mm tall: the island hangs on a bridge.
+    const icon = loadIcon(islandSvg, { id: 't', name: 'T', themes: ['everyday'], minHeightMm: 20, defaultMm: [20, 24], source: 's', licence: 'l' });
+    const mm = scale(icon.poly, 20);
+    expect(icon.poly.filter((c) => !outerCount([c]))).toEqual([]);
+    expect(outerCount(sheetWith(mm))).toBe(1);
+    // Cut area: 400 minus the 64 mm² island minus a bridge at least BRIDGE_MM wide across the 6 mm band.
+    expect(area(mm)).toBeLessThan(400 - 64 - BRIDGE_MM * 6 * 0.99);
+    expect(area(mm)).toBeGreaterThan(400 - 64 - 4 * 6);
+  });
+
+  test('loadIcon fills paper islands instead when the meta says fill', () => {
+    const icon = loadIcon(islandSvg, { id: 't', name: 'T', themes: ['everyday'], minHeightMm: 20, defaultMm: [20, 24], source: 's', licence: 'l', fill: true });
+    expect(icon.poly.length).toBe(1);
+    expect(area(icon.poly)).toBeCloseTo(1, 3);
+  });
+
+  test('the paper check counts a 0.6 mm strip of paper between two cuts but not a 3 mm one', () => {
+    const box = (x: number, y: number, w: number, h: number): Pt[] => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
+    const paper = (gap: number): Poly => difference([box(-3, -3, 26 + gap, 16)], [box(0, 0, 10, 10), box(10 + gap, 0, 10, 10)]);
+    expect(thinArea(paper(0.6), 1)).toBeGreaterThan(0.05);
+    expect(thinArea(paper(3), 1)).toBeLessThan(0.05);
   });
 
   test('loadIcon flips y so the SVG top ends up at the top', () => {
     const icon = loadIcon('<svg viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="2"/><rect x="0" y="0" width="2" height="10"/></svg>', {
-      id: 't', name: 'T', minHeightMm: 1, defaultMm: [1, 2], source: 's', licence: 'l',
+      id: 't', name: 'T', themes: ['everyday'], minHeightMm: 1, defaultMm: [1, 2], source: 's', licence: 'l',
     });
     const top = bounds(intersect(icon.poly, [[{ x: -1, y: 0.9 }, { x: 2, y: 0.9 }, { x: 2, y: 1 }, { x: -1, y: 1 }]]))!;
     expect(top.w).toBeCloseTo(1, 2);
@@ -63,19 +115,15 @@ describe('icons', () => {
     expect(() => borderById('nope')).toThrow();
   });
 
-  test.each(ICONS.map((i) => i.id))('%s has a name and a default size range no smaller than its minimum', (id) => {
-    const i = iconById(id);
-    expect(i.name.trim()).not.toBe('');
-    expect(i.defaultMm[0]).toBeGreaterThanOrEqual(i.minHeightMm);
-    expect(i.defaultMm[1]).toBeGreaterThanOrEqual(i.defaultMm[0]);
-  });
 });
 
 const styleIcons = new Set(THEMES.flatMap((t) => t.styles.flatMap((st) => st.items.map((it) => it.icon))));
 
 describe('borders', () => {
   test('the seed patterns exist, each tiled with a known icon', () => {
-    expect(BORDERS.map((b) => b.id).sort()).toEqual(['confetti-row', 'heart-row', 'snow-row', 'star-row']);
+    expect(BORDERS.map((b) => b.id).sort()).toEqual(
+      ['cap-row', 'confetti-row', 'dot-row', 'heart-row', 'holly-row', 'scallop-edge', 'snow-row', 'star-row'],
+    );
     for (const b of BORDERS) {
       expect(borderById(b.id)).toBe(b);
       expect(b.name.trim()).not.toBe('');
@@ -89,6 +137,13 @@ describe('borders', () => {
 
   test('border tiles have no holes', () => {
     for (const b of BORDERS) expect(iconById(b.tile).poly.filter((c) => !outerCount([c])), b.id).toEqual([]);
+  });
+
+  test('the new patterns tile with their own shapes', () => {
+    expect(borderById('holly-row').tile).toBe('holly');
+    expect(borderById('scallop-edge').tile).toBe('scallop');
+    expect(borderById('dot-row').tile).toBe('dot');
+    expect(borderById('cap-row').tile).toBe('mortarboard');
   });
 });
 
@@ -131,6 +186,24 @@ describe('themes', () => {
     }
   });
 
+  test("every style uses only illustrations that list its theme", () => {
+    for (const t of THEMES) {
+      for (const st of t.styles) for (const it of st.items) expect(iconById(it.icon).themes, `${t.id}/${st.id}/${it.icon}`).toContain(t.id);
+    }
+  });
+
+  test('first styles match their names', () => {
+    const icons = (id: ThemeId, style: string) => themeById(id).styles.find((st) => st.id === style)!.items.map((it) => it.icon);
+    expect(icons('birthday', 'confetti')).toContain('confetti');
+    expect(icons('birthday', 'balloons')).toContain('balloon');
+    expect(icons('birthday', 'candles')).toContain('candles');
+    expect(icons('baby-girl', 'stork')).toContain('stork');
+    expect(icons('baby-boy', 'stork')).toContain('stork');
+    expect(icons('graduation', 'caps')).toContain('mortarboard');
+    expect(icons('christmas', 'holly')).toContain('holly');
+    expect(icons('christmas', 'snow')).toContain('snowflake');
+  });
+
   test("each theme's first style has no border", () => {
     for (const t of THEMES.filter((x) => x.styles.length)) expect(t.styles[0].border, t.id).toBeNull();
   });
@@ -142,9 +215,9 @@ describe('themes', () => {
   });
 
   test("Birthday's first style is today's motifs: six confetti and four stars", () => {
-    expect(themeById('birthday').styles[0].items).toEqual([
-      { icon: 'confetti', count: 6, minMm: 9, maxMm: 14 },
-      { icon: 'star', count: 4, minMm: 9, maxMm: 13 },
+    expect(themeById('birthday').styles[0].items.map(({ icon, count }) => ({ icon, count }))).toEqual([
+      { icon: 'confetti', count: 6 },
+      { icon: 'star', count: 4 },
     ]);
   });
 

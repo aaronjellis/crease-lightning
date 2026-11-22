@@ -21,8 +21,12 @@ export interface Border {
 export const BORDERS: Border[] = [
   { id: 'star-row', name: 'Stars', tile: 'star', sizeFrac: 0.07, minMm: 9, gapMm: 4 },
   { id: 'heart-row', name: 'Hearts', tile: 'heart', sizeFrac: 0.07, minMm: 8, gapMm: 4 },
-  { id: 'confetti-row', name: 'Confetti', tile: 'confetti', sizeFrac: 0.07, minMm: 9, gapMm: 4 },
-  { id: 'snow-row', name: 'Snowflakes', tile: 'snowflake', sizeFrac: 0.1, minMm: 16, gapMm: 5 },
+  { id: 'confetti-row', name: 'Confetti', tile: 'confetti', sizeFrac: 0.075, minMm: 10, gapMm: 4 },
+  { id: 'snow-row', name: 'Snowflakes', tile: 'snowflake', sizeFrac: 0.09, minMm: 14, gapMm: 5 },
+  { id: 'holly-row', name: 'Holly', tile: 'holly', sizeFrac: 0.1, minMm: 18, gapMm: 4 },
+  { id: 'scallop-edge', name: 'Scallops', tile: 'scallop', sizeFrac: 0.05, minMm: 6, gapMm: 3 },
+  { id: 'dot-row', name: 'Dots', tile: 'dot', sizeFrac: 0.035, minMm: 4, gapMm: 4 },
+  { id: 'cap-row', name: 'Graduation caps', tile: 'mortarboard', sizeFrac: 0.1, minMm: 17, gapMm: 5 },
 ];
 
 export function borderById(id: string): Border {

@@ -12,7 +12,7 @@ export const thankYou: Theme = {
       name: 'Hearts',
       border: null,
       items: [
-        { icon: 'heart', count: 5, minMm: 9, maxMm: 14 },
+        { icon: 'heart', count: 5, minMm: 8, maxMm: 12 },
         { icon: 'star', count: 2, minMm: 9, maxMm: 13 },
         { icon: 'sparkle-star', count: 2, minMm: 9, maxMm: 13 },
       ],
@@ -23,8 +23,18 @@ export const thankYou: Theme = {
       border: 'star-row',
       items: [
         { icon: 'star', count: 4, minMm: 9, maxMm: 13 },
-        { icon: 'sparkle-star', count: 3, minMm: 9, maxMm: 12 },
-        { icon: 'heart', count: 2, minMm: 9, maxMm: 12 },
+        { icon: 'sparkle-star', count: 3, minMm: 9, maxMm: 13 },
+        { icon: 'heart', count: 2, minMm: 8, maxMm: 12 },
+      ],
+    },
+    {
+      id: 'flowers',
+      name: 'Flowers',
+      border: 'dot-row',
+      items: [
+        { icon: 'flower', count: 3, minMm: 12, maxMm: 16 },
+        { icon: 'flower-tulip', count: 2, minMm: 22, maxMm: 26 },
+        { icon: 'leaf', count: 2, minMm: 12, maxMm: 16 },
       ],
     },
   ],
