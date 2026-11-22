@@ -148,16 +148,18 @@ describe('launch themes', () => {
     if (e.inner) expect(t.colours.inner).toBe(e.inner);
   });
 
-  // Ruling R11: the default font is the bundled one with the tallest line 1 on a 5 x 7 long-spine card.
+  // Rulings R11 and R14: Arvo, unless another bundled font beats its line 1 by more than 0.1 mm on 5 x 7.
   const fonts = testFonts();
   const capOf = (t: (typeof THEMES)[number], font: string): number => {
     const p = { ...applyTheme(defaultParams('en-US'), t, BIRTHDAY_DEFAULTS), font };
     return fitLayout(p, fonts, t, 'blade', { strokeCheck: false }).blocks.l1.capMm;
   };
-  test.each(THEMES.filter((t) => t.lines[0]).map((t) => t.id))('%s default font gives the largest line 1 on a 5 x 7 card', (id) => {
+  test.each(THEMES.map((t) => t.id))('%s default font is Arvo unless another beats it by more than 0.1 mm', (id) => {
     const t = themeById(id);
     const caps = Object.fromEntries(['Alfa Slab One', 'Arvo', 'Rokkitt'].map((f) => [f, capOf(t, f)]));
-    for (const [f, cap] of Object.entries(caps)) expect(caps[t.font], `${t.font} vs ${f}`).toBeGreaterThanOrEqual(cap - 0.05);
+    const best = Object.entries(caps).reduce((m, e) => (e[1] > m[1] ? e : m));
+    const expected = best[1] > caps.Arvo + 0.1 ? best[0] : 'Arvo';
+    expect(t.font).toBe(expected);
   });
 
   test.each(THEMES.filter((t) => t.accents.length).map((t) => t.id))('%s shows both accents on a 5 x 7 card with its default lines', (id) => {

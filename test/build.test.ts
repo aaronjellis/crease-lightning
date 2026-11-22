@@ -74,7 +74,7 @@ describe('build', () => {
     test('the laser has no mat note', () => expect(noteFor('a5', 'laser')).not.toContain(MAT_NOTE));
   });
 
-  describe('matrix: theme × size × spine × lines × font', () => {
+  describe('matrix: theme × size × spine × lines × font (R15)', () => {
     const cases: [string, Params][] = [];
     for (const theme of THEMES) {
       const base = applyTheme(P0, theme, BIRTHDAY_DEFAULTS);
@@ -82,7 +82,8 @@ describe('build', () => {
       for (const size of Object.keys(CARD_SIZES) as CardSize[]) {
         for (const spine of ['long', 'short'] as const) {
           for (const v of variants) {
-            for (const font of FONTS) {
+            // R15: every theme with its own font; all three bundled fonts only for Birthday and Blank.
+            for (const font of theme.id === 'birthday' || theme.id === 'blank' ? FONTS : [base.font]) {
               const [line1, line2] = v.split('|');
               cases.push([`${theme.id} ${size} ${spine} "${line1}" / "${line2}" ${font}`, { ...withSize(base, size), spine, line1, line2, font }]);
             }

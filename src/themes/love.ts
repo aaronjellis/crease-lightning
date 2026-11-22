@@ -4,7 +4,7 @@ export const love: Theme = {
   id: 'love',
   name: 'Love',
   lines: ['LOVE YOU', 'ALWAYS'],
-  font: 'Alfa Slab One',
+  font: 'Arvo',
   colours: { inner: '#fff0f3', jacket: '#c2185b' },
   accents: ['heart-stand', 'mail'],
   motifs: [
