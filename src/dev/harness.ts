@@ -19,6 +19,9 @@ async function bundledFonts(text: string): Promise<FontSet> {
 }
 
 const scene = new CardScene($<HTMLCanvasElement>('#scene'));
+void scene.ready.then((r) => {
+  if (!r.ok) status.textContent = `3D preview isn't available in this browser (${r.error.message}).`;
+});
 scene.onTheta = (deg) => {
   angle.value = String(Math.round(deg));
   angleOut.value = `${Math.round(deg)}°`;

@@ -9,6 +9,10 @@
  *
  * Lifetimes: renderer, environment, materials and controls live until `dispose`; panel geometries
  * live until the next `setCard`.
+ *
+ * Failure: if three.js fails to load or WebGL is missing, `ready` resolves to `{ ok: false, error }`
+ * (it never rejects). Every other method stays safe to call in that state and nothing rejects
+ * unhandled; `renderPng` rejects with "3D preview isn't available…" so the caller can fall back.
  */
 import type * as T from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -21,6 +25,26 @@ import { poseMatrix, viewCamera, type ViewName } from './pose';
 import { polyShapes } from './shapes';
 
 type Three = typeof import('three');
+type RoomEnvironmentClass = typeof import('three/examples/jsm/environments/RoomEnvironment.js').RoomEnvironment;
+
+/** The three.js modules the scene needs; injectable so tests can simulate a failed load. */
+export interface ThreeModules {
+  THREE: Three;
+  OrbitControls: typeof import('three/examples/jsm/controls/OrbitControls.js').OrbitControls;
+  RoomEnvironment: RoomEnvironmentClass;
+}
+
+/** What `CardScene.ready` resolves to. */
+export type SceneStatus = { ok: true } | { ok: false; error: Error };
+
+async function loadThree(): Promise<ThreeModules> {
+  const [THREE, { OrbitControls }, { RoomEnvironment }] = await Promise.all([
+    import('three'),
+    import('three/examples/jsm/controls/OrbitControls.js'),
+    import('three/examples/jsm/environments/RoomEnvironment.js'),
+  ]);
+  return { THREE, OrbitControls, RoomEnvironment };
+}
 type Highlight = (typeof FOLD_STEPS)[number]['highlight'];
 
 /** Per nesting layer, panels sit this far proud of their parent, so coplanar faces never fight. */
@@ -32,9 +56,12 @@ const HIGHLIGHT = '#ffb000';
 const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const clampTheta = (deg: number) => Math.max(0, Math.min(180, deg));
+/** Fire-and-forget calls report, never reject unhandled (only an `onTheta` callback can throw there). */
+const reportError = (e: unknown) => console.error(e);
 
 interface Runtime {
   THREE: Three;
+  RoomEnvironment: RoomEnvironmentClass;
   renderer: T.WebGLRenderer;
   scene: T.Scene;
   env: { texture: T.Texture; dispose(): void };
@@ -74,8 +101,11 @@ interface Animation {
 }
 
 export class CardScene {
-  /** Resolves once three.js has loaded and the renderer exists. */
-  readonly ready: Promise<void>;
+  /**
+   * Resolves once three.js has loaded and the renderer exists (`{ ok: true }`), or with the reason it
+   * couldn't (`{ ok: false, error }`). Never rejects.
+   */
+  readonly ready: Promise<SceneStatus>;
   /** Called whenever the shown angle changes (dragging, animating), for a slider to follow. */
   onTheta: ((deg: number) => void) | null = null;
 
@@ -94,19 +124,30 @@ export class CardScene {
   private framed: { W: number; L: number; radius: number } | null = null;
   private firstShown = false;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
-    this.ready = this.init();
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    opts: { load?: () => Promise<ThreeModules> } = {}
+  ) {
+    this.ready = this.init(opts.load ?? loadThree);
   }
 
-  private async init(): Promise<void> {
-    const [THREE, { OrbitControls }, { RoomEnvironment }] = await Promise.all([
-      import('three'),
-      import('three/examples/jsm/controls/OrbitControls.js'),
-      import('three/examples/jsm/environments/RoomEnvironment.js'),
-    ]);
-    if (this.disposed) return;
+  private async init(load: () => Promise<ThreeModules>): Promise<SceneStatus> {
+    let renderer: T.WebGLRenderer | undefined;
+    try {
+      const modules = await load();
+      if (this.disposed) throw new Error('The 3D view was closed before it loaded.');
+      renderer = this.makeRenderer(modules.THREE, this.canvas, false);
+      this.start3d(modules, renderer);
+      return { ok: true };
+    } catch (e) {
+      // Release whatever got made: the whole runtime if it was assembled, else just the renderer.
+      if (this.rt) this.teardown();
+      else renderer?.dispose();
+      return { ok: false, error: e instanceof Error ? e : new Error(String(e)) };
+    }
+  }
 
-    const renderer = this.makeRenderer(THREE, this.canvas, false);
+  private start3d({ THREE, OrbitControls, RoomEnvironment }: ThreeModules, renderer: T.WebGLRenderer): void {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     const scene = new THREE.Scene();
     const env = this.makeEnv(THREE, RoomEnvironment, renderer);
@@ -147,7 +188,7 @@ export class CardScene {
     const observer = new ResizeObserver(() => this.resize());
     observer.observe(this.canvas);
 
-    this.rt = { THREE, renderer, scene, env, camera, controls, sun, rig, content, mats, observer, offscreen: null };
+    this.rt = { THREE, RoomEnvironment, renderer, scene, env, camera, controls, sun, rig, content, mats, observer, offscreen: null };
     this.resize();
     if (this.card) this.rebuild();
     this.last = performance.now();
@@ -163,11 +204,7 @@ export class CardScene {
     return renderer;
   }
 
-  private makeEnv(
-    THREE: Three,
-    RoomEnvironment: typeof import('three/examples/jsm/environments/RoomEnvironment.js').RoomEnvironment,
-    renderer: T.WebGLRenderer
-  ) {
+  private makeEnv(THREE: Three, RoomEnvironment: RoomEnvironmentClass, renderer: T.WebGLRenderer) {
     const pmrem = new THREE.PMREMGenerator(renderer);
     const room = new RoomEnvironment();
     const target = pmrem.fromScene(room);
@@ -191,9 +228,10 @@ export class CardScene {
 
   /** Eases to an opening angle over `ms` (1.5 s by default); instant under reduced motion. */
   async animateTo(deg: number, ms = ANIMATE_MS): Promise<void> {
-    await this.ready;
+    const status = await this.ready;
     const to = clampTheta(deg);
-    if (this.disposed || reducedMotion() || ms <= 0 || to === this.theta) {
+    // No running frame loop (failed or disposed) means nothing would step the animation: jump.
+    if (!status.ok || !this.rt || this.disposed || reducedMotion() || ms <= 0 || to === this.theta) {
       this.setTheta(to);
       return;
     }
@@ -208,20 +246,24 @@ export class CardScene {
     const step = i === null ? null : FOLD_STEPS[i];
     this.highlight = step?.highlight ?? null;
     this.applyHighlight();
-    if (step) void this.animateTo(step.theta);
+    if (step) this.animateTo(step.theta).catch(reportError);
   }
 
   /** A still at angle thetaDeg from a stock view, as PNG bytes. Browser only. */
   async renderPng(width: number, height: number, thetaDeg: number, view: ViewName): Promise<Uint8Array> {
-    await this.ready;
+    const status = await this.ready;
+    if (!status.ok) throw new Error(`3D preview isn't available in this browser: ${status.error.message}`);
+    // Read the runtime after the await: dispose may have run meanwhile. From here to `toBlob` nothing
+    // awaits, so sequential and concurrent calls each render and snapshot without interleaving.
     const rt = this.rt;
-    if (!rt || !this.built) throw new Error('No card to render.');
+    if (!rt || this.disposed) throw new Error('The 3D view has been closed.');
+    if (!this.built) throw new Error('No card to render.');
     const { THREE } = rt;
-    if (!rt.offscreen) {
-      const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
+    // Created once, synchronously, so concurrent calls can't each make (and orphan) a renderer.
+    rt.offscreen ??= (() => {
       const renderer = this.makeRenderer(THREE, document.createElement('canvas'), true);
-      rt.offscreen = { renderer, env: this.makeEnv(THREE, RoomEnvironment, renderer) };
-    }
+      return { renderer, env: this.makeEnv(THREE, rt.RoomEnvironment, renderer) };
+    })();
     const { renderer, env } = rt.offscreen;
     renderer.setPixelRatio(1);
     renderer.setSize(width, height, false);
@@ -241,6 +283,8 @@ export class CardScene {
     rt.rig.rotation.copy(saved.rot);
     this.poseAt(saved.theta);
 
+    // toBlob copies the bitmap when called; only the encoding is async, so a later render or a
+    // dispose during the await can't change this still.
     const canvas = renderer.domElement;
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
     if (!blob) throw new Error('The 3D still could not be encoded.');
@@ -249,8 +293,13 @@ export class CardScene {
 
   dispose(): void {
     this.disposed = true;
+    this.onTheta = null;
     this.stopAnimation();
-    cancelAnimationFrame(this.frame);
+    this.teardown();
+  }
+
+  private teardown(): void {
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.frame);
     const rt = this.rt;
     if (!rt) return;
     rt.observer.disconnect();
@@ -343,7 +392,7 @@ export class CardScene {
       this.firstShown = true;
       this.theta = reducedMotion() ? 90 : 0;
       this.pose();
-      void this.animateTo(90);
+      this.animateTo(90).catch(reportError);
     } else this.pose();
   }
 
@@ -432,7 +481,7 @@ export class CardScene {
 
     if (this.anim) {
       const a = this.anim;
-      const p = Math.min(1, (now - a.start) / a.ms);
+      const p = Math.max(0, Math.min(1, (now - a.start) / a.ms));
       this.theta = a.from + (a.to - a.from) * easeInOut(p);
       this.pose();
       if (p >= 1) this.stopAnimation();
