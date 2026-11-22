@@ -107,6 +107,7 @@ export const CHECKS = {
   undoLabel: (message: string) => `Undo: ${message}`,
   restore: 'Restore',
   restoreLabel: 'Restore the fix you undid',
+  useFont: (family: string) => `Use ${family}`,
   undoneFix: (id: string) => `You undid fix ${id}.`,
   pending: 'Checking stroke widths…',
   notRun: "Stroke widths weren't checked. Change the card to try again.",

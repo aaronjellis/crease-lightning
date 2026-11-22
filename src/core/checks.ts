@@ -25,10 +25,8 @@ const EPS = 1e-6;
 const SLOT_MM = 0.1;
 /** Panels may overlap by this much in total before the layout fails. */
 const OVERLAP_MM2 = 0.5;
-/** Matches the note fit emits for a thin stroke. */
 /** Least overlap, after growing the riser by 0.01 mm, that counts as touching. */
 const TOUCH_MM2 = 1e-4;
-const THIN_NOTE = /thinner than/;
 
 type Check = Omit<CheckResult, 'id'>;
 type Subject = Omit<Card, 'checks'>;
@@ -108,7 +106,7 @@ function layoutCheck(card: Subject, p: Params): Check {
 /** Reads fit's result: ok unless fit emitted a thin-stroke note. */
 function stroke(card: Subject, run: boolean): Check {
   if (!run) return { ok: true, detail: 'not run' };
-  const thin = card.notes.find((n) => THIN_NOTE.test(n.message));
+  const thin = card.notes.find((n) => n.kind === 'thin-stroke');
   return thin ? { ok: false, detail: thin.message } : { ok: true };
 }
 

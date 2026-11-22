@@ -1,7 +1,8 @@
 /**
- * Checks: whether the card is ready, each pre-export check, the fixes the fit made (each with Undo),
- * and the notes. Undoing a fix sets `overrides[id]`; the fit then leaves a warning, which carries a
- * Restore button.
+ * Checks: whether the card is ready, each pre-export check, the fixes the fit made (each with Undo,
+ * except bridges, which always stay), and the notes. Undoing a fix sets `overrides[id]`; the fit then
+ * leaves a warning, which carries a Restore button. A note with a remedy (the heavier font, R31)
+ * carries a button for it.
  */
 import type { Card } from '../../core/build';
 import { undone } from '../../core/fixes';
@@ -37,15 +38,20 @@ export function checksCard(ctx: Ctx): View {
     ctx.update({ ...p, overrides: withoutKey(p.overrides, id) });
   };
 
+  /** What the status line says now; it's rewritten only when this changes, so screen readers hear it once (M12). */
+  let statusKey = '';
+
   const render = (p: Params, card: Card | null, state: BuildState) => {
     if (!card) return;
     // A failed stroke check warns but doesn't block export (R23).
     const warned = card.exportable && card.checks.some((c) => c.id === 'stroke' && !c.ok);
-    status.className = `check-status ${warned ? 'is-warned' : card.exportable ? 'is-ready' : 'is-blocked'}`;
-    status.replaceChildren(
-      h('span', { class: 'check-icon', 'aria-hidden': 'true', text: card.exportable && !warned ? '✓' : '!' }),
-      warned ? CHECKS.readyWithWarning : card.exportable ? CHECKS.ready : CHECKS.notReady
-    );
+    const kind = warned ? 'is-warned' : card.exportable ? 'is-ready' : 'is-blocked';
+    const said = warned ? CHECKS.readyWithWarning : card.exportable ? CHECKS.ready : CHECKS.notReady;
+    if (`${kind}|${said}` !== statusKey) {
+      statusKey = `${kind}|${said}`;
+      status.className = `check-status ${kind}`;
+      status.replaceChildren(h('span', { class: 'check-icon', 'aria-hidden': 'true', text: card.exportable && !warned ? '✓' : '!' }), said);
+    }
 
     list.replaceChildren(
       ...card.checks.map((c) => {
@@ -66,6 +72,8 @@ export function checksCard(ctx: Ctx): View {
     fixesHead.hidden = card.fixes.length === 0;
     fixes.replaceChildren(
       ...card.fixes.map((f) => {
+        // Undoing a bridge would only leave a piece to fall out, and the fit keeps it anyway (M11).
+        if (f.id.startsWith('bridge:')) return h('li', { class: 'fix' }, h('span', { text: f.message }));
         const b = h('button', { type: 'button', class: 'link-button', 'aria-label': CHECKS.undoLabel(f.message), 'data-ph-capture-attribute-fix': f.id }, CHECKS.undo);
         b.addEventListener('click', () => undo(f.id));
         return h('li', { class: 'fix' }, h('span', { text: f.message }), b);
@@ -80,6 +88,13 @@ export function checksCard(ctx: Ctx): View {
         if (id) {
           action = h('button', { type: 'button', class: 'link-button', 'aria-label': CHECKS.restoreLabel, 'data-ph-capture-attribute-fix': id }, CHECKS.restore);
           action.addEventListener('click', () => restore(id));
+        } else if (n.action?.kind === 'font') {
+          const family = n.action.family;
+          action = h('button', { type: 'button', class: 'link-button', 'data-ph-capture-attribute-font': family }, CHECKS.useFont(family));
+          action.addEventListener('click', () => {
+            const cur = ctx.params();
+            if (cur.font !== family) ctx.update({ ...cur, font: family });
+          });
         }
         return h('li', { class: `note note-${n.level}` }, h('span', { class: 'note-text ph-no-capture', text: n.message }), action);
       })

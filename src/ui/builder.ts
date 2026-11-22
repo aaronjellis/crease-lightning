@@ -75,6 +75,7 @@ export function mainThreadBuilder(fonts: FontLoader): Builder {
           if (kind === 'preview') b.onLoading?.(false);
         }
       }
+      if (strokeCheck) await fonts.ensureHeavy();
       try {
         return { ok: true, card: build(params, { fonts: set }, target, { strokeCheck }) };
       } catch (e) {

@@ -348,8 +348,10 @@ describe('fitLayout', () => {
     // Rokkitt's @ ring is about 1.1 mm at a 12 mm cap; ten of them fit 5 x 7 at about 12.4 mm.
     const p = base({ line1: '@'.repeat(10), line2: '', autoSplit: false, spacing: 'normal' });
     const thin = (l: Layout) => l.notes.some((n) => n.level === 'strong' && /thinner than/.test(n.message));
-    const blade = fitLayout(p, fonts, blank, 'blade');
-    const laser = fitLayout(p, fonts, blank, 'laser');
+    // Without Alfa Slab One loaded, the note is the plain one that names the minimum (R31 needs the font).
+    const noAlfa: FontSet = { get: (f) => (f === 'Alfa Slab One' ? undefined : fonts.get(f)), fallback: fonts.fallback };
+    const blade = fitLayout(p, noAlfa, blank, 'blade');
+    const laser = fitLayout(p, noAlfa, blank, 'laser');
     expect(blade.blocks.l1.capMm).toBeCloseTo(laser.blocks.l1.capMm, 9);
     expect(thin(blade)).toBe(true);
     expect(blade.notes.some((n) => n.message.includes('1.5 mm'))).toBe(true);

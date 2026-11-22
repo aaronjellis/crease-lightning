@@ -30,7 +30,7 @@ export const pickLocale = (code: unknown): string => {
 const within = <T>(p: Promise<T>, ms: number): Promise<T> =>
   Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timed out')), ms))]);
 
-/** The platform's language, read once before the first render; any failure keeps English (R28). */
+/** The platform's language, read once after the first render; any failure keeps English (R28). */
 async function platformLocale(): Promise<string> {
   try {
     const sdk = window.atomm ?? (document.readyState === 'complete' ? undefined : await within(new Promise<AtommSdk | undefined>((r) => addEventListener('load', () => r(window.atomm), { once: true })), 1500));
@@ -40,11 +40,14 @@ async function platformLocale(): Promise<string> {
   }
 }
 
-async function main() {
+function main() {
   const root = document.getElementById('app');
   if (!root) return;
-  document.documentElement.lang = await platformLocale();
+  // Render first: waiting on the platform's language could leave the page blank for up to 3 s (M8).
   start(root);
+  void platformLocale().then((lang) => {
+    document.documentElement.lang = lang;
+  });
 }
 
 function start(root: HTMLElement) {
@@ -77,8 +80,17 @@ function start(root: HTMLElement) {
     }
   });
 
+  /** The platform's own Export: when the card can't be exported, the footer says why (M7). */
   const register = () =>
-    window.atomm?.lifecycle?.on('export', async ({ intent }) => files(intent === 'openInStudio' ? 'openInStudio' : 'download'));
+    window.atomm?.lifecycle?.on('export', async ({ intent }) => {
+      status.textContent = '';
+      try {
+        return await files(intent === 'openInStudio' ? 'openInStudio' : 'download');
+      } catch (e) {
+        status.textContent = e instanceof Error ? e.message : String(e);
+        throw e;
+      }
+    });
   if (window.atomm) register();
   else addEventListener('load', register, { once: true });
 }

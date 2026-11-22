@@ -1,4 +1,5 @@
 /** Loads each font family once per session, on the page or in the build worker. */
+import { HEAVY_FAMILY } from './fixes';
 import { FALLBACK_FAMILY, type FontSet, type LoadedFont } from './fonts';
 import type { Params } from './model';
 
@@ -55,5 +56,13 @@ export class FontLoader {
     const text = p.line1 + p.line2;
     await Promise.all([this.request(FALLBACK_FAMILY, text), this.request(p.font, text)]);
     return this.setFor(p)!;
+  }
+
+  /**
+   * The heaviest bundled slab, which a stroke-checked build tries when strokes are thin (R31). It's
+   * bundled, so this is quick; if it fails, the build just doesn't offer it.
+   */
+  async ensureHeavy(): Promise<void> {
+    if (!this.loaded.has(HEAVY_FAMILY)) await this.request(HEAVY_FAMILY).catch(() => undefined);
   }
 }

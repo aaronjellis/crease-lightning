@@ -1,10 +1,11 @@
 /** Message: the two lines, auto-split, and all caps. Message text never reaches analytics. */
+import { MAX_LINE_CHARS } from '../../core/codec';
 import { themeById } from '../../themes';
 import type { Ctx, View } from '../context';
 import { h, railCard, syncValue, toggle } from '../dom';
 import { MESSAGE } from '../strings';
 
-const MAX_CHARS = 40;
+const MAX_CHARS = MAX_LINE_CHARS;
 
 export function messageCard(ctx: Ctx): View {
   const line = (name: 'line1' | 'line2', label: string, optional: boolean) => {

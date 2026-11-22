@@ -26,6 +26,8 @@ import {
   fitFix,
   fontFix,
   fontMissingNote,
+  HEAVY_FAMILY,
+  heavierFontNote,
   oneWordNote,
   railFix,
   smallNote,
@@ -57,6 +59,8 @@ export interface Layout {
 export interface FitOptions {
   /** Run the stroke check (`thinArea`, 70 to 450 ms a line). The UI turns it off per keystroke. */
   strokeCheck?: boolean;
+  /** Internal: this fit only asks whether Alfa Slab One would pass, so it doesn't ask again. */
+  probe?: boolean;
 }
 
 /** The size table is for W = 127; other cards scale d and h by W / 127. */
@@ -436,7 +440,16 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
   else if (caps.some((x) => x < WARN_CAP_MM)) notes.push(smallNote('warn'));
   if (opts.strokeCheck ?? true) {
     const minStroke = target === 'laser' ? MIN_STROKE_LASER_MM : MIN_STROKE_BLADE_MM;
-    for (const line of lines) if (isThin(blocks[line.id], minStroke)) notes.push(thinNote(line.id, minStroke));
+    const thin = lines.filter((line) => isThin(blocks[line.id], minStroke));
+    // R31: when the same card in the heaviest bundled slab passes, the note says so and offers it.
+    const heavier =
+      thin.length > 0 &&
+      !opts.probe &&
+      p.font !== HEAVY_FAMILY &&
+      fonts.get(HEAVY_FAMILY) !== undefined &&
+      !fitLayout({ ...p, font: HEAVY_FAMILY }, fonts, theme, target, { strokeCheck: true, probe: true }).notes.some((n) => n.kind === 'thin-stroke');
+    if (heavier) notes.push(heavierFontNote());
+    else for (const line of thin) notes.push(thinNote(line.id, minStroke));
   }
 
   const seen = new Set<string>();

@@ -2,6 +2,22 @@ import { describe, expect, test } from 'vitest';
 import { decodeLink, encodeLink, loadJson, migrate, saveJson } from '../src/core/codec';
 import { defaultParams } from '../src/core/model';
 
+describe('migrate trusts nothing a link says (M6)', () => {
+  test('an unknown font becomes the theme font; a known one stays', () => {
+    const p = defaultParams('en-US');
+    expect(migrate({ ...p, font: 'Comic Sans MS' })!.font).toBe('Arvo');
+    expect(migrate({ ...p, theme: 'christmas', font: '<img src=x>' })!.font).toBe('Arvo');
+    expect(migrate({ ...p, font: 'Ultra' })!.font).toBe('Ultra');
+  });
+  test('lines are cut to the 40-character input limit, never through a surrogate pair', () => {
+    const p = defaultParams('en-US');
+    const out = migrate({ ...p, line1: 'A'.repeat(500), line2: 'B'.repeat(39) + '😀' })!;
+    expect(out.line1).toBe('A'.repeat(40));
+    expect(out.line2).toBe('B'.repeat(39));
+    expect(migrate({ ...p, line1: 'HAPPY BIRTHDAY' })!.line1).toBe('HAPPY BIRTHDAY');
+  });
+});
+
 describe('codec', () => {
   test('link round-trips', () => {
     const p = defaultParams('en-US');

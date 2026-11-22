@@ -30,9 +30,33 @@ describe('build', () => {
     const card = build(p, assets, 'blade', { strokeCheck: true });
     expect(card.checks.find((c) => c.id === 'stroke')!.ok).toBe(false);
     expect(card.checks.filter((c) => c.id !== 'stroke').every((c) => c.ok)).toBe(true);
-    expect(card.notes.some((n) => n.level === 'strong' && /thinner than/.test(n.message))).toBe(true);
+    expect(card.notes.some((n) => n.level === 'strong' && n.kind === 'thin-stroke')).toBe(true);
     expect(card.exportable).toBe(true);
   });
+
+  test('when Alfa Slab One would pass, the thin-stroke note says so and offers it (R31)', () => {
+    const p: Params = { ...P0, theme: 'blank', font: 'Rokkitt', line1: '@'.repeat(10), line2: '', autoSplit: false, spacing: 'normal' };
+    const card = build(p, assets, 'blade', { strokeCheck: true });
+    const note = card.notes.find((n) => n.kind === 'thin-stroke')!;
+    expect(note.message).toBe('Some strokes are thin enough to tear. Alfa Slab One has heavier strokes, or try a bigger card.');
+    expect(note.action).toEqual({ kind: 'font', family: 'Alfa Slab One' });
+    expect(card.checks.find((c) => c.id === 'stroke')!.detail).toBe(note.message);
+    // And it's true: the same card in Alfa Slab One passes.
+    const alfa = build({ ...p, font: 'Alfa Slab One' }, assets, 'blade', { strokeCheck: true });
+    expect(alfa.checks.find((c) => c.id === 'stroke')!.ok).toBe(true);
+  });
+
+  test('when Alfa Slab One would be thin too, the note names the line and offers nothing', () => {
+    // At A2 with a short spine, line 1 is about 6 mm tall: too small for any font.
+    const p: Params = { ...withSize(P0, 'a2'), spine: 'short', theme: 'anniversary', line1: 'HAPPY ANNIVERSARY', line2: 'ALEX & SAM' };
+    const card = build(p, assets, 'blade', { strokeCheck: true });
+    const notes = card.notes.filter((n) => n.kind === 'thin-stroke');
+    expect(notes.length).toBeGreaterThan(0);
+    for (const n of notes) {
+      expect(n.message).toMatch(/^Some strokes in line \d are thinner than 1.5 mm/);
+      expect(n.action).toBeUndefined();
+    }
+  }, 30_000);
 
   test('stroke check off reports "not run"', () => {
     const card = build(P0, assets, 'blade', { strokeCheck: false });
@@ -64,6 +88,24 @@ describe('build', () => {
       expect(card.layout.steps.length).toBeGreaterThan(0);
       expect(card.checks.every((c) => c.ok)).toBe(true);
       expect(card.params.line1).toBe(lines.line1);
+    });
+
+    test.each([
+      ['a pipe', '|'],
+      ['pipes and spaces', ' | | '],
+      ['emoji only', '😀🎉'],
+      ['a script no bundled font has', 'こんにちは'],
+    ])('a line 1 with nothing to draw (%s) counts as blank (M2)', (_name, line1) => {
+      const card = build({ ...P0, line1, line2: '' }, assets, 'blade', { strokeCheck: false });
+      expect(card.exportable).toBe(false);
+      expect(card.notes.map((n) => n.message)).toContain(EMPTY_NOTE);
+      expect(card.layout.lines).toEqual(['HAPPY BIRTHDAY', 'SAM']);
+    });
+
+    test('a line 1 with one drawable character among emoji is not blank', () => {
+      const card = build({ ...P0, line1: '😀 A 😀', line2: '' }, assets, 'blade', { strokeCheck: false });
+      expect(card.notes.map((n) => n.message)).not.toContain(EMPTY_NOTE);
+      expect(card.layout.lines).toEqual(['A']);
     });
 
     test('a filled card has no empty-message note', () => {

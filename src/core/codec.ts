@@ -1,5 +1,17 @@
 import { WEB_MM } from './constants';
+import { SLAB_FONTS } from './fonts';
 import { THEME_IDS, type FoldStyle, type Params, type Spacing, type StepDims } from './model';
+import { themeById } from '../themes';
+
+/** The message inputs' `maxlength` (UTF-16 units, as the browser counts). */
+export const MAX_LINE_CHARS = 40;
+
+/** A line cut to the input's limit, never through the middle of a surrogate pair. */
+function capLine(line: string): string {
+  if (line.length <= MAX_LINE_CHARS) return line;
+  const cut = line.slice(0, MAX_LINE_CHARS);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+}
 
 const SIZES = ['5x7', 'a2', 'a6', 'a5'] as const;
 const SPACINGS: readonly Spacing[] = ['tight', 'normal', 'loose'];
@@ -27,7 +39,10 @@ function stepDims(v: unknown): StepDims | undefined | null {
   return out;
 }
 
-/** Validates every field, clamps numbers to their ranges, drops unknown fields. Null if invalid. */
+/**
+ * Validates every field, clamps numbers to their ranges, drops unknown fields. Null if invalid. Lines
+ * longer than the inputs allow are cut to 40 characters, and an unknown font becomes the theme's.
+ */
 export function migrate(raw: unknown): Params | null {
   if (!isObj(raw) || raw.version !== 1) return null;
   const { theme, line1, line2, font, spacing, size, spine } = raw;
@@ -60,14 +75,16 @@ export function migrate(raw: unknown): Params | null {
   const advanced: Params['advanced'] = { overhangMm, railMm, clearanceMm, foldStyle: a.foldStyle as FoldStyle };
   if (l1) advanced.line1 = l1;
   if (l2) advanced.line2 = l2;
+  // A link or file names its own font: only the families the app offers load; anything else is the theme's (M6).
+  const knownFont = SLAB_FONTS.some((f) => f.family === font) ? font : themeById(theme as Params['theme']).font;
   return {
     version: 1,
     theme: theme as Params['theme'],
-    line1,
-    line2,
+    line1: capLine(line1),
+    line2: capLine(line2),
     autoSplit: raw.autoSplit as boolean,
     allCaps: raw.allCaps as boolean,
-    font,
+    font: knownFont,
     spacing: spacing as Spacing,
     size: size as Params['size'],
     spine,

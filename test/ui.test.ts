@@ -139,6 +139,32 @@ describe('mountApp', () => {
     expect($('.export-note').textContent).toBe(EMPTY_MESSAGE_NOTE);
   });
 
+  test('a link the head snippet moved off the URL still opens (I4)', async () => {
+    const { encodeLink } = await import('../src/core/codec');
+    const { LINK_FRAGMENT_SNIPPET, LINK_STASH } = await import('../src/ui/linkFragment');
+    const p: Params = { ...defaultParams('en-US'), line1: 'PRIVATE WORDS', line2: '' };
+    history.replaceState(null, '', '/crease-lightning/?x=1' + encodeLink(p));
+    // Run the snippet as the wrapper's <head> would, before analytics loads.
+    new Function(LINK_FRAGMENT_SNIPPET.replace(/^<script>|<\/script>$/g, ''))();
+    expect(location.hash).toBe('');
+    expect(location.pathname + location.search).toBe('/crease-lightning/?x=1');
+    expect((window as unknown as Record<string, unknown>)[LINK_STASH]).toBe(encodeLink(p));
+    const a = await mount();
+    expect(a.getParams()).toEqual(p);
+    expect((window as unknown as Record<string, unknown>)[LINK_STASH]).toBeUndefined();
+  });
+
+  test('the export modal steps follow Advanced → Fold lines (M1)', async () => {
+    const a = await mount();
+    const p = a.getParams();
+    a.setParams({ ...p, advanced: { ...p.advanced, foldStyle: 'perforate' } });
+    await a.whenIdle();
+    $<HTMLButtonElement>('button.export').click();
+    $<HTMLButtonElement>('[data-ph-capture-attribute-target="cricut"]').click();
+    const steps = [...root.querySelectorAll('.export-steps li')].map((li) => li.textContent);
+    expect(steps).toEqual(['Upload happy-birthday-both.svg in Design Space.', 'Click Make it.']);
+  });
+
   test('opening with #d=garbage shows the error and the defaults', async () => {
     history.replaceState(null, '', '/#d=garbage');
     const a = await mount();
@@ -184,8 +210,12 @@ describe('mountApp', () => {
     expect(targets.map((t) => t.getAttribute('data-ph-capture-attribute-target'))).toEqual(Object.keys(TARGETS));
     (targets[0] as HTMLButtonElement).click();
     const steps = [...root.querySelectorAll('.export-steps li')].map((li) => li.textContent);
-    expect(steps).toHaveLength(TARGETS.cricut.steps.length);
-    expect(steps[0]).toBe('Upload happy-birthday-both.svg in Design Space.');
+    expect(steps).toEqual([
+      'Upload happy-birthday-both.svg in Design Space.',
+      'Change Inner-Score and Jacket-Score to Score.',
+      'Select Inner-Cut and Inner-Score and click Attach. Do the same for Jacket-Cut and Jacket-Score.',
+      'Click Make it.',
+    ]);
     $<HTMLButtonElement>('button.download').click();
     await vi.waitFor(() => expect(saved).toHaveLength(1), { timeout: 20_000 });
     expect(saved[0].filename).toBe('happy-birthday-cricut.zip');
@@ -244,9 +274,53 @@ describe('Checks card', () => {
     // The stroke check runs in the rebuild 600 ms after changes stop.
     await vi.waitFor(() => expect(root.querySelector('.check.is-warn')).toBeTruthy(), { timeout: 10_000 });
     expect(root.querySelector('.check-status')!.textContent).toContain('Ready to export, but some strokes may tear.');
-    expect([...root.querySelectorAll('.checks .note-strong .note-text')].some((n) => /thinner than/.test(n.textContent!))).toBe(true);
+    expect([...root.querySelectorAll('.checks .note-strong .note-text')].map((n) => n.textContent)).toContain(
+      'Some strokes are thin enough to tear. Alfa Slab One has heavier strokes, or try a bigger card.'
+    );
     expect(root.querySelector<HTMLButtonElement>('button.export')!.disabled).toBe(false);
-  }, 20_000);
+
+    // Use Alfa Slab One (R31): one click switches the font, and the stroke check then passes.
+    const use = root.querySelector<HTMLButtonElement>('.checks button[data-ph-capture-attribute-font="Alfa Slab One"]')!;
+    expect(use.textContent).toBe('Use Alfa Slab One');
+    use.click();
+    expect(a.getParams().font).toBe('Alfa Slab One');
+    await a.whenIdle();
+    await vi.waitFor(() => expect(root.querySelector('.check-status')!.textContent).toContain('Ready to export.'), { timeout: 10_000 });
+    expect(root.querySelector('.check.is-warn')).toBeNull();
+  }, 30_000);
+
+  test('bridge fixes have no Undo; other fixes do (M11)', async () => {
+    const a = await mount();
+    const p = a.getParams();
+    a.setParams({ ...p, theme: 'blank', line1: 'WHY?', line2: 'HAPPY 40TH!', spacing: 'normal', advanced: { ...p.advanced, line1: { s: 40 } } });
+    await a.whenIdle();
+    const fixes = [...root.querySelectorAll('.checks .fix')];
+    const bridge = fixes.filter((li) => /bridge/.test(li.textContent!));
+    expect(bridge.length).toBeGreaterThan(0);
+    for (const li of bridge) expect(li.querySelector('button')).toBeNull();
+    expect(root.querySelector('button[data-ph-capture-attribute-fix="fit:l1"]')).toBeTruthy();
+    expect(root.querySelector('button[data-ph-capture-attribute-fix^="bridge:"]')).toBeNull();
+  });
+
+  test('the status line and export note are rewritten only when their words change (M12)', async () => {
+    const a = await mount();
+    const status = root.querySelector('.check-status')!;
+    const note = root.querySelector('.export-note')!;
+    const writes: string[] = [];
+    new MutationObserver((records) => records.forEach((r) => writes.push((r.target as Element).className ?? 'text'))).observe(status, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    const noteWrites: number[] = [];
+    new MutationObserver((records) => noteWrites.push(records.length)).observe(note, { childList: true, characterData: true, subtree: true });
+    // A change that keeps the card ready: the words stay, so nothing is announced again.
+    a.setParams({ ...a.getParams(), line2: 'JO' });
+    await a.whenIdle();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(writes).toEqual([]);
+    expect(noteWrites).toEqual([]);
+  });
 });
 
 describe('exportModal', () => {

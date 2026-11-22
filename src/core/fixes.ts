@@ -12,6 +12,10 @@ export interface Fix {
 export interface Note {
   level: 'info' | 'warn' | 'strong';
   message: string;
+  /** What the note is about, for code that reacts to it (the stroke check reads `thin-stroke`). */
+  kind?: 'thin-stroke';
+  /** A one-click remedy the Checks card offers beside the note. */
+  action?: { kind: 'font'; family: string };
 }
 
 const NAMES: Record<string, string> = { l1: 'line 1', l2: 'line 2', a1: 'the first accent', a2: 'the second accent' };
@@ -69,7 +73,21 @@ export const smallNote = (level: 'warn' | 'strong'): Note => ({ level, message: 
 
 export const thinNote = (id: string, minStrokeMm: number): Note => ({
   level: 'strong',
+  kind: 'thin-stroke',
   message: `Some strokes in ${name(id)} are thinner than ${minStrokeMm} mm and may tear. Try a bolder font or a bigger card.`,
+});
+
+/** The heaviest bundled slab: the font the thin-stroke note offers when it would pass (R31). */
+export const HEAVY_FAMILY = 'Alfa Slab One';
+
+export const HEAVIER_FONT = `Some strokes are thin enough to tear. ${HEAVY_FAMILY} has heavier strokes, or try a bigger card.`;
+
+/** The thin-stroke note when the same card in Alfa Slab One passes the stroke check (R31). */
+export const heavierFontNote = (): Note => ({
+  level: 'strong',
+  kind: 'thin-stroke',
+  message: HEAVIER_FONT,
+  action: { kind: 'font', family: HEAVY_FAMILY },
 });
 
 export const oneWordNote = (word: string): Note => ({
@@ -82,7 +100,7 @@ export const LINE2_DROPPED =
 
 export const line2DroppedNote = (): Note => ({ level: 'strong', message: LINE2_DROPPED });
 
-export const droppedNote =(chars: string[]): Note => ({
+export const droppedNote = (chars: string[]): Note => ({
   level: 'warn',
   message: `We left out ${chars.join(' ')}; it can't be cut as a pop-up.`,
 });

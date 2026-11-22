@@ -14,6 +14,7 @@ import { decodeLink } from '../core/codec';
 import { loadFont as realLoadFont, type LoadedFont } from '../core/fonts';
 import { defaultParams, type Params } from '../core/model';
 import { mainThreadBuilder, moduleWorkersSupported, workerBuilder, type Builder } from './builder';
+import { takeLinkFragment } from './linkFragment';
 import { CardScene } from '../view3d/scene';
 import { createCanvas } from './canvas';
 import { advancedCard } from './cards/advanced';
@@ -79,11 +80,12 @@ export function sameGeometry(a: Params, b: Params): boolean {
 
 /** The opening design: a link wins, then the autosave, then the defaults. */
 function initialParams(d: AppDeps): { params: Params; linkError: boolean } {
-  const hash = location.hash;
+  // The labs wrapper's head snippet may already have moved the fragment off the URL (I4).
+  const hash = takeLinkFragment();
   if (hash.startsWith('#d=')) {
     const p = decodeLink(hash);
     // The link has done its job; edits from here on belong to the autosave, not a stale fragment.
-    history.replaceState(history.state, '', location.pathname + location.search);
+    if (location.hash) history.replaceState(history.state, '', location.pathname + location.search);
     return p ? { params: p, linkError: false } : { params: defaultParams(d.locale), linkError: true };
   }
   return { params: readAutosave(d.storage) ?? defaultParams(d.locale), linkError: false };
@@ -175,7 +177,9 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
 
   const renderExport = () => {
     exportBtn.disabled = !card?.exportable;
-    exportNoteEl.textContent = exportNote(card);
+    // A live region: rewrite it only when the words change, or each render announces it again (M12).
+    const note = exportNote(card);
+    if (exportNoteEl.textContent !== note) exportNoteEl.textContent = note;
   };
   exportBtn.addEventListener('click', async () => {
     if (modal) return modal.open();

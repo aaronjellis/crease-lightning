@@ -24,6 +24,7 @@ export async function handle(m: ToWorker): Promise<void> {
     }
     post({ type: 'building', id: m.id });
   }
+  if (m.strokeCheck) await fonts.ensureHeavy();
   try {
     post({ type: 'done', id: m.id, card: build(m.params, { fonts: set }, m.target, { strokeCheck: m.strokeCheck }) });
   } catch (err) {
