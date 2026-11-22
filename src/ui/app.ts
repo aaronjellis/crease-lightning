@@ -157,7 +157,11 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
     host,
     params: () => params,
     update: (next, opts = {}) => update(next, opts.typing ?? false, opts.undoable ?? false),
-    selection: () => (selected !== null && params.decor.items.some((i) => i.id === selected) ? selected : null),
+    selection() {
+      // An id that no longer exists is dropped for good, so a recycled id can't revive it.
+      if (selected !== null && !params.decor.items.some((i) => i.id === selected)) selected = null;
+      return selected;
+    },
     select(id) {
       if (id === selected) return;
       selected = id;
@@ -165,7 +169,9 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
     },
     decorUndo() {
       const restore = decorStash;
-      if (restore) update({ ...params, decor: restore }, false, false);
+      if (!restore) return;
+      selected = null;
+      update({ ...params, decor: restore }, false, false);
     },
     canDecorUndo: () => decorStash !== null,
     fonts,
@@ -266,6 +272,8 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   function update(next: Params, typing: boolean, undoable = false) {
     if (destroyed) return;
     if (next.decor !== params.decor && JSON.stringify(next.decor) !== JSON.stringify(params.decor)) decorStash = undoable ? params.decor : null;
+    // Ids are positional (i1, i2, ...), so a replaced decor would put the selection on a different item.
+    if (undoable) selected = null;
     params = next;
     version++;
     clearTimeout(strokeTimer);

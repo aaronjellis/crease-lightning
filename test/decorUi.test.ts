@@ -183,6 +183,35 @@ describe('Decorations card', () => {
     expect($('.decor-empty').hidden).toBe(false);
   });
 
+  const selectFirst = () => click($(`[data-ph-capture-attribute-item="${app.getParams().decor.items[1].id}"] .decor-chip-select`));
+  const sizeHidden = () => $('input[name="decor-size"]').closest('[hidden]') !== null;
+
+  test('a style pick, Undo, and None clear the selection', () => {
+    selectFirst();
+    expect(sizeHidden()).toBe(false);
+    click(byText('Balloons'));
+    expect(sizeHidden()).toBe(true);
+    selectFirst();
+    expect(sizeHidden()).toBe(false);
+    click(undo());
+    expect(sizeHidden()).toBe(true);
+    selectFirst();
+    click(byText('None'));
+    expect(sizeHidden()).toBe(true);
+  });
+
+  test('a theme change clears the selection', () => {
+    selectFirst();
+    click($('[data-ph-capture-attribute-theme="christmas"]'));
+    expect(sizeHidden()).toBe(true);
+  });
+
+  test('ordinary edits keep the selection', () => {
+    selectFirst();
+    click(byText('Shuffle'));
+    expect(sizeHidden()).toBe(false);
+  });
+
   test('tracks each decorations event', () => {
     click(byText('Balloons'));
     click($('input[name="decor-border"]'));
