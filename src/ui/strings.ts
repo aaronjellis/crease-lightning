@@ -53,6 +53,7 @@ export const FLAT = {
   cut: 'Cut',
   mountain: 'Mountain fold',
   valley: 'Valley fold',
+  perforated: 'Perforated fold',
   showThrough: 'Jacket shows through',
   label: (what: string, w: number, h: number) => `${what}, ${Math.round(w)} × ${Math.round(h)} mm`,
 };
@@ -109,6 +110,7 @@ export const CHECKS = {
   undoneFix: (id: string) => `You undid fix ${id}.`,
   pending: 'Checking stroke widths…',
   ready: 'Ready to export.',
+  readyWithWarning: 'Ready to export, but some strokes may tear.',
   notReady: 'Not ready to export yet.',
 };
 

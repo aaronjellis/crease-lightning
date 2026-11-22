@@ -6,13 +6,17 @@
  */
 import type { Card } from '../core/build';
 import type { Piece } from '../core/flatten';
-import { pieceSvg } from '../export/svg';
+import type { FoldStyle } from '../core/model';
+import { pieceSvg, withFoldStyle } from '../export/svg';
 import { TARGETS } from '../export/targets';
 import { h, svgFrom } from './dom';
 import { FLAT } from './strings';
 
-/** Score folds so every fold is drawn as its own line; the colours come from the paper. */
-const PREVIEW_TARGET = TARGETS.cricut;
+/**
+ * A blade target, so folds score by default and each is drawn as its own line; Advanced → Fold lines
+ * still applies, so Perforate shows the perforations (R25).
+ */
+const previewTarget = (foldStyle: FoldStyle) => withFoldStyle(TARGETS.cricut, foldStyle);
 
 function luminance(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
@@ -27,9 +31,9 @@ function luminance(hex: string): number {
 export const inkOn = (paper: string): string => (luminance(paper) > 0.18 ? '#1c1a17' : '#fbfaf7');
 
 /** A sheet as preview SVG markup on its paper colour. */
-export function sheetSvg(piece: Piece, paper: string): string {
+export function sheetSvg(piece: Piece, paper: string, foldStyle: FoldStyle = 'auto'): string {
   const ink = inkOn(paper);
-  const svg = pieceSvg(piece, PREVIEW_TARGET, { cut: ink, score: ink }, { preview: true });
+  const svg = pieceSvg(piece, previewTarget(foldStyle), { cut: ink, score: ink }, { preview: true });
   // Our own markup: put the paper behind every line, just inside the opening tag.
   const at = svg.indexOf('>') + 1;
   const sheet = `<rect width="${piece.widthMm}" height="${piece.heightMm}" fill="${paper}" data-part="paper"/>`;
@@ -47,6 +51,7 @@ export function flatView(): { el: HTMLElement; render(card: Card): void } {
     legendLine('cut', FLAT.cut),
     legendLine('valley', FLAT.valley),
     legendLine('mountain', FLAT.mountain),
+    legendLine('perforation', FLAT.perforated),
     h('li', {}, h('span', { class: 'swatch-hole', 'aria-hidden': 'true' }), FLAT.showThrough)
   );
   const el = h('div', { class: 'flat-view' }, sheets, legend);
@@ -55,8 +60,10 @@ export function flatView(): { el: HTMLElement; render(card: Card): void } {
     el,
     render(card) {
       const { inner, jacket } = card.params.colours;
+      const perforated = previewTarget(card.params.advanced.foldStyle).fold === 'perforate';
+      legend.dataset.folds = perforated ? 'perforate' : 'score';
       const figure = (piece: Piece, paper: string, label: string) => {
-        const svg = svgFrom(sheetSvg(piece, paper));
+        const svg = svgFrom(sheetSvg(piece, paper, card.params.advanced.foldStyle));
         svg.setAttribute('role', 'img');
         svg.setAttribute('aria-label', FLAT.label(label, piece.widthMm, piece.heightMm));
         svg.removeAttribute('width');

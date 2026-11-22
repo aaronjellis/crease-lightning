@@ -1,6 +1,7 @@
 /**
  * The five pre-export checks: the card closes flat, the inner sheet is one piece, cuts keep their
- * web, strokes are thick enough, and line 2 doesn't hide line 1. Export is allowed only when all pass.
+ * web, strokes are thick enough, and line 2 doesn't hide line 1. Export needs all but `stroke` to pass:
+ * thin strokes warn without blocking (R23).
  */
 import { area, difference, grow, intersect, offsetOpen, outerCount, union, type Poly } from '@kerfuffle/engine/geom';
 import type { Card } from './build';

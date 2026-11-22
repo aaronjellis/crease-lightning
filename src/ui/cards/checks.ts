@@ -39,21 +39,26 @@ export function checksCard(ctx: Ctx): View {
 
   const render = (p: Params, card: Card | null, state: BuildState) => {
     if (!card) return;
-    status.className = `check-status ${card.exportable ? 'is-ready' : 'is-blocked'}`;
+    // A failed stroke check warns but doesn't block export (R23).
+    const warned = card.exportable && card.checks.some((c) => c.id === 'stroke' && !c.ok);
+    status.className = `check-status ${warned ? 'is-warned' : card.exportable ? 'is-ready' : 'is-blocked'}`;
     status.replaceChildren(
-      h('span', { class: 'check-icon', 'aria-hidden': 'true', text: card.exportable ? '✓' : '!' }),
-      card.exportable ? CHECKS.ready : CHECKS.notReady
+      h('span', { class: 'check-icon', 'aria-hidden': 'true', text: card.exportable && !warned ? '✓' : '!' }),
+      warned ? CHECKS.readyWithWarning : card.exportable ? CHECKS.ready : CHECKS.notReady
     );
 
     list.replaceChildren(
       ...card.checks.map((c) => {
         const pending = c.id === 'stroke' && !state.strokeChecked && c.ok;
+        const warn = c.id === 'stroke' && !c.ok;
         const text = pending ? CHECKS.pending : c.ok ? CHECK_NAMES[c.id].ok : CHECK_NAMES[c.id].fail;
+        const kind = pending ? 'is-pending' : c.ok ? 'is-ok' : warn ? 'is-warn' : 'is-fail';
         return h(
           'li',
-          { class: `check ${pending ? 'is-pending' : c.ok ? 'is-ok' : 'is-fail'}` },
-          h('span', { class: 'check-mark', 'aria-hidden': 'true', text: pending ? '…' : c.ok ? '✓' : '✕' }),
-          h('span', {}, text, !c.ok && c.detail ? h('small', { text: c.detail }) : null)
+          { class: `check ${kind}` },
+          h('span', { class: 'check-mark', 'aria-hidden': 'true', text: pending ? '…' : c.ok ? '✓' : warn ? '!' : '✕' }),
+          // The stroke detail repeats the thin-stroke note below, so it isn't shown twice.
+          h('span', {}, text, !c.ok && !warn && c.detail ? h('small', { text: c.detail }) : null)
         );
       })
     );

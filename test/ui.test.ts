@@ -6,6 +6,9 @@ import { undone } from '../src/core/fixes';
 import { EMPTY_MESSAGE_NOTE } from '../src/core/build';
 import { mountApp, type AppDeps, type AppApi, type SceneLike } from '../src/ui/app';
 import { TARGETS } from '../src/export/targets';
+import { build, type Card } from '../src/core/build';
+import { exportModal } from '../src/ui/exportModal';
+import { testFonts } from './helpers/fonts';
 import { alfa, arvo, rokkitt } from './helpers/fonts';
 
 const FONTS: Record<string, LoadedFont['font']> = { 'Alfa Slab One': alfa, Arvo: arvo, Rokkitt: rokkitt };
@@ -189,5 +192,104 @@ describe('mountApp', () => {
     expect(root.querySelector('dialog.export-modal')).toBeNull();
     $<HTMLButtonElement>('button.export').click();
     await vi.waitFor(() => expect(seen).toEqual(['HAPPY BIRTHDAY']), { timeout: 20_000 });
+  }, 30_000);
+
+  test('the Flat preview follows Advanced → Fold lines: Perforate shows perforations (R25)', async () => {
+    const a = await mount();
+    expect(root.querySelector('.flat-view [data-part="fold"]')).toBeTruthy();
+    expect(root.querySelector('.flat-view [data-part="perforation"]')).toBeNull();
+    const p = a.getParams();
+    a.setParams({ ...p, advanced: { ...p.advanced, foldStyle: 'perforate' } });
+    await a.whenIdle();
+    expect(root.querySelector('.flat-view [data-part="perforation"]')).toBeTruthy();
+    expect(root.querySelector('.flat-view [data-part="fold"]')).toBeNull();
+  });
+
+  test('prepareExport builds from the params current once fonts load, not a stale snapshot (R24)', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const slow = async (family: string) => {
+      if (family === 'Ultra') await gate;
+      return loadFont(family);
+    };
+    const a = await mount({ loadFont: slow });
+    a.setParams({ ...a.getParams(), font: 'Ultra' });
+    const pending = a.prepareExport();
+    a.setParams({ ...a.getParams(), line1: 'CHANGED' });
+    release();
+    const card = await pending;
+    expect(card.params).toBe(a.getParams());
+    expect(card.params.line1).toBe('CHANGED');
+  });
+});
+
+describe('Checks card', () => {
+  test('a failed stroke check is a strong warning; Export stays on (R23)', async () => {
+    const a = await mount();
+    const p = a.getParams();
+    a.setParams({ ...p, theme: 'blank', font: 'Rokkitt', line1: '@'.repeat(10), line2: '', autoSplit: false, spacing: 'normal' });
+    await a.whenIdle();
+    // The stroke check runs in the rebuild 600 ms after changes stop.
+    await vi.waitFor(() => expect(root.querySelector('.check.is-warn')).toBeTruthy(), { timeout: 10_000 });
+    expect(root.querySelector('.check-status')!.textContent).toContain('Ready to export, but some strokes may tear.');
+    expect([...root.querySelectorAll('.checks .note-strong .note-text')].some((n) => /thinner than/.test(n.textContent!))).toBe(true);
+    expect(root.querySelector<HTMLButtonElement>('button.export')!.disabled).toBe(false);
+  }, 20_000);
+});
+
+describe('exportModal', () => {
+  const fonts = { fonts: testFonts() };
+  const p = defaultParams('en-US');
+  const preview = build(p, fonts, 'blade', { strokeCheck: false });
+
+  const openModal = (prepared: Card) => {
+    const saved: string[] = [];
+    const m = exportModal({
+      prepare: async () => prepared,
+      stepImages: async () => [],
+      saveBlob: (name) => void saved.push(name),
+      current: () => preview,
+    });
+    root.append(m.el);
+    m.open();
+    root.querySelector<HTMLButtonElement>('[data-ph-capture-attribute-target="cricut"]')!.click();
+    return { m, saved };
+  };
+
+  test('a refusal from the stroke-checked export card stays shown, even though the preview card was exportable', async () => {
+    // Same params as the preview, but the export build found a real problem.
+    const refused: Card = {
+      ...preview,
+      exportable: false,
+      checks: preview.checks.map((c) => (c.id === 'closed' ? { ...c, ok: false, detail: 'Line 1 reaches 2 mm past the card.' } : c)),
+    };
+    const { m, saved } = openModal(refused);
+    const download = root.querySelector<HTMLButtonElement>('button.download')!;
+    expect(download.disabled).toBe(false);
+    download.click();
+    await vi.waitFor(() => expect(root.querySelector('.export-status')!.textContent).toBe(''));
+    await new Promise((r) => setTimeout(r, 0));
+    const blocked = root.querySelector('.export-blocked')!;
+    expect(blocked.hasAttribute('hidden')).toBe(false);
+    expect(blocked.textContent).toContain('Line 1 reaches 2 mm past the card.');
+    expect(download.disabled).toBe(true);
+    expect(saved).toEqual([]);
+    // Reopening keeps the verdict while the params are the same.
+    m.open();
+    expect(root.querySelector('.export-blocked')!.hasAttribute('hidden')).toBe(false);
+  });
+
+  test('thin strokes show as a warning beside Download and still export (R23)', async () => {
+    const thin = 'Some strokes in line 1 are thinner than 1.5 mm and may tear. Try a bolder font or a bigger card.';
+    const warned: Card = { ...preview, checks: preview.checks.map((c) => (c.id === 'stroke' ? { ...c, ok: false, detail: thin } : c)) };
+    const { saved } = openModal(warned);
+    const download = root.querySelector<HTMLButtonElement>('button.download')!;
+    download.click();
+    await vi.waitFor(() => expect(saved).toEqual(['happy-birthday-cricut.zip']), { timeout: 20_000 });
+    const warning = root.querySelector('.export-warning')!;
+    expect(warning.hasAttribute('hidden')).toBe(false);
+    expect(warning.textContent).toBe(thin);
+    expect(root.querySelector('.export-blocked')!.hasAttribute('hidden')).toBe(true);
+    expect(download.disabled).toBe(false);
   }, 30_000);
 });

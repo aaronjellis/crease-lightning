@@ -174,13 +174,14 @@
 .check-icon { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 12px; color: #fff; }
 .is-ready .check-icon { background: var(--ok); }
 .is-blocked .check-icon { background: var(--warn); }
+.is-warned .check-icon { background: var(--strong); }
 .check-list, .note-list, .fix-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .note-list:empty, .fix-list:empty { display: none; }
 .check { display: flex; gap: 8px; font-size: 13px; color: var(--ink-2); }
 .check small { display: block; color: var(--ink-3); }
 .check-mark { width: 14px; flex: none; font-weight: 700; text-align: center; }
 .check.is-ok .check-mark { color: var(--ok); }
-.check.is-fail { color: var(--strong); }
+.check.is-fail, .check.is-warn { color: var(--strong); }
 .check.is-pending .check-mark { color: var(--ink-3); }
 .fix {
   display: flex;

@@ -24,6 +24,16 @@ describe('build', () => {
     expect(card.panels.length).toBeGreaterThan(2);
   }, 60_000);
 
+  test('thin strokes fail the stroke check but stay exportable: a warning, not a refusal (R23)', () => {
+    // Rokkitt's @ ring is about 1.1 mm at this size, under the blade's 1.5 mm (see fit.test).
+    const p: Params = { ...P0, theme: 'blank', font: 'Rokkitt', line1: '@'.repeat(10), line2: '', autoSplit: false, spacing: 'normal' };
+    const card = build(p, assets, 'blade', { strokeCheck: true });
+    expect(card.checks.find((c) => c.id === 'stroke')!.ok).toBe(false);
+    expect(card.checks.filter((c) => c.id !== 'stroke').every((c) => c.ok)).toBe(true);
+    expect(card.notes.some((n) => n.level === 'strong' && /thinner than/.test(n.message))).toBe(true);
+    expect(card.exportable).toBe(true);
+  });
+
   test('stroke check off reports "not run"', () => {
     const card = build(P0, assets, 'blade', { strokeCheck: false });
     expect(card.checks.find((c) => c.id === 'stroke')).toEqual({ id: 'stroke', ok: true, detail: 'not run' });

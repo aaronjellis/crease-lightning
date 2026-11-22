@@ -8,7 +8,7 @@ import { slugName } from '../export/slug';
 import { TARGETS, type Target, type TargetFile, type TargetId } from '../export/targets';
 import { track } from './context';
 import { h } from './dom';
-import { blockingReasons } from './exportState';
+import { blockingReasons, exportWarnings } from './exportState';
 import { EXPORT } from './strings';
 
 export interface ExportDeps {
@@ -44,6 +44,11 @@ export function exportModal(deps: ExportDeps): { el: HTMLDialogElement; open(): 
   const ids = Object.keys(TARGETS) as TargetId[];
   let chosen: TargetId | null = null;
   let busy = false;
+  /**
+   * The last stroke-checked export card. Its verdict beats the preview card's (which may predate its
+   * stroke check) until the target or the params change.
+   */
+  let verdict: Card | null = null;
 
   const targetButtons = ids.map((id) => {
     const t = TARGETS[id];
@@ -63,6 +68,8 @@ export function exportModal(deps: ExportDeps): { el: HTMLDialogElement; open(): 
   const stepsBox = h('div', { class: 'export-steps-box', hidden: true }, stepsHead, steps);
   const blocked = h('div', { class: 'export-blocked', hidden: true });
   const status = h('p', { class: 'export-status ph-no-capture', role: 'status' });
+  // Thin strokes don't block export; they're shown beside Download (R23). The text can quote the message.
+  const warning = h('p', { class: 'export-warning ph-no-capture', hidden: true });
   const download = h('button', { type: 'button', class: 'primary download', disabled: true }, EXPORT.download);
   const close = h('button', { type: 'button', class: 'ghost icon-button modal-close', 'aria-label': EXPORT.close }, '×');
 
@@ -77,7 +84,7 @@ export function exportModal(deps: ExportDeps): { el: HTMLDialogElement; open(): 
       h('div', { class: 'targets', role: 'group', 'aria-label': 'Machine' }, ...targetButtons),
       blocked,
       stepsBox,
-      h('div', { class: 'modal-foot' }, status, download)
+      h('div', { class: 'modal-foot' }, h('div', { class: 'modal-foot-text' }, status, warning), download)
     )
   );
 
@@ -88,9 +95,18 @@ export function exportModal(deps: ExportDeps): { el: HTMLDialogElement; open(): 
     return reasons.length > 0;
   };
 
+  const showWarnings = (card: Card | null) => {
+    const w = card ? exportWarnings(card) : [];
+    warning.hidden = w.length === 0;
+    warning.textContent = w.join(' ');
+  };
+
   const refresh = () => {
-    const card = deps.current();
+    const preview = deps.current();
+    if (verdict && verdict.params !== preview?.params) verdict = null;
+    const card = verdict ?? preview;
     const isBlocked = showBlocked(card);
+    showWarnings(card);
     download.disabled = busy || !chosen || isBlocked;
     if (!chosen) return;
     const t = TARGETS[chosen];
@@ -101,6 +117,7 @@ export function exportModal(deps: ExportDeps): { el: HTMLDialogElement; open(): 
 
   function choose(id: TargetId) {
     chosen = id;
+    verdict = null;
     targetButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(ids[i] === id)));
     status.textContent = '';
     refresh();
@@ -115,6 +132,8 @@ export function exportModal(deps: ExportDeps): { el: HTMLDialogElement; open(): 
     try {
       await nextPaint();
       const card = await deps.prepare(target.kind === 'laser' ? 'laser' : 'blade');
+      verdict = card;
+      showWarnings(card);
       if (showBlocked(card)) {
         status.textContent = '';
         return;

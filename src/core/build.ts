@@ -20,6 +20,7 @@ export interface Card {
   checks: CheckResult[];
   fixes: Fix[];
   notes: Note[];
+  /** Line 1 is typed and every check but `stroke` passes; a thin stroke is a strong warning only (R23). */
   exportable: boolean;
   stats: { cutMm: number; scoreMm: number };
 }
@@ -75,6 +76,7 @@ export function build(
     exportable: false,
   };
   const checks = runChecks(partial, shown, { strokeCheck });
-  const exportable = !blankMessage && layout.steps.length > 0 && checks.every((c) => c.ok);
+  // Thin strokes are a strong warning, not a refusal (spec, Text fit: "export still works"; R23).
+  const exportable = !blankMessage && layout.steps.length > 0 && checks.every((c) => c.ok || c.id === 'stroke');
   return { ...partial, checks, exportable };
 }

@@ -128,10 +128,13 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   const views: View[] = [rail, ...cards];
   const canvas = createCanvas(d.createScene);
 
+  /** Builds from the params current when the fonts are ready, never a snapshot from before the wait. */
   const prepareExport = async (kind: 'blade' | 'laser' = previewTarget): Promise<Card> => {
-    const p = params;
-    const set = await fonts.ensure(p);
-    return build(p, { fonts: set }, kind, { strokeCheck: true });
+    for (;;) {
+      const p = params;
+      const set = await fonts.ensure(p);
+      if (p === params) return build(p, { fonts: set }, kind, { strokeCheck: true });
+    }
   };
 
   // ---------------------------------------------------------------- export
@@ -154,6 +157,8 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
     exportBtn.disabled = true;
     try {
       const c = await prepareExport();
+      // Never hand over or show geometry the person has since changed (R24).
+      if (c.params !== params) return;
       if (c.exportable) hooks.onExportRequest?.(c);
       else showCard(c, false, { strokeChecked: true });
     } finally {
