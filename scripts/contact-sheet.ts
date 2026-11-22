@@ -39,7 +39,7 @@ const cells = ICONS.map((icon, n) => {
     `<rect x="${ox + 4}" y="${oy + 4}" width="${CELL_W - 8}" height="${CELL_H - 8}" fill="none" stroke="#cccccc" stroke-width="0.5"/>`,
     `<text x="${ox + 10}" y="${oy + 20}" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="700" fill="#111111">${esc(icon.id)}</text>`,
     `<text x="${ox + 10}" y="${oy + 33}" font-family="Helvetica, Arial, sans-serif" font-size="8" fill="#333333">${esc(shorten(icon.source.replace(MATERIAL_PREFIX, 'Material Symbols 700 rounded'), 62))}</text>`,
-    `<text x="${ox + 10}" y="${oy + 44}" font-family="Helvetica, Arial, sans-serif" font-size="8" fill="#333333">${esc(icon.licence)}</text>`,
+    `<text x="${ox + 10}" y="${oy + 44}" font-family="Helvetica, Arial, sans-serif" font-size="6.5" fill="#333333">${esc(icon.licence)}</text>`,
     `<text x="${ox + 10}" y="${oy + 55}" font-family="Helvetica, Arial, sans-serif" font-size="8" fill="#333333">min ${icon.minHeightMm} mm   one piece ${mark(one)}   stroke ${mark(stroke)}</text>`,
     `<path d="${path(small, ox + 12, baseY)}" fill="${one && stroke ? '#111111' : '#d00000'}" fill-rule="evenodd"/>`,
     `<path d="${path(big, ox + 12 + wSmall + GAP_MM, baseY)}" fill="${one && stroke ? '#111111' : '#d00000'}" fill-rule="evenodd"/>`,
