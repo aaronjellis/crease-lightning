@@ -4,3 +4,4 @@ dist-atomm/
 .superpowers/
 *.zip
 contact-sheet.svg
+.DS_Store
