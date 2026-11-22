@@ -28,9 +28,13 @@ export const clearFix = (): Fix => ({
   message: 'Line 2 stood in front of line 1, so we raised line 1 and lowered line 2.',
 });
 
-export const railFix = (id: string): Fix => ({
+/** `widen`: rails under 5 mm grow to 5 mm. `narrow`: wide rails shrink to 5 mm so the line fits. */
+export const railFix = (id: string, how: 'widen' | 'narrow' = 'widen'): Fix => ({
   id: `rail:${id}`,
-  message: `We widened the strip under ${name(id)} to keep ${RAIL_MM} mm rails, so the frame doesn't tear.`,
+  message:
+    how === 'widen'
+      ? `We widened the strip under ${name(id)} to keep ${RAIL_MM} mm rails, so the frame doesn't tear.`
+      : `The rails left ${name(id)} no room, so we narrowed them to ${RAIL_MM} mm.`,
 });
 
 export const bridgeFix = (n: number, id: string): Fix => ({
@@ -49,7 +53,10 @@ export function undone(fixId: string, detail = ''): Note {
   const messages: Record<string, string> = {
     fit: `${cap(name(id))} keeps your step sizes, so the card may not close flat.`,
     clear: 'Line 2 may hide part of line 1 when you look at the open card.',
-    rail: `The rails beside ${name(id)} are under ${RAIL_MM} mm and may tear.`,
+    rail:
+      detail === 'narrow'
+        ? `${cap(name(id))} only fits with ${RAIL_MM} mm rails, so its rails stay narrowed.`
+        : `The rails beside ${name(id)} are under ${RAIL_MM} mm and may tear.`,
     bridge: 'Without its bridge a piece would fall out, so the bridge stays.',
     font: `We left out ${detail} in ${name(id)}; your font can't draw it.`,
   };
@@ -70,7 +77,12 @@ export const oneWordNote = (word: string): Note => ({
   message: `"${word}" is one word, so it can't split onto two lines. Shorten it or pick a bigger card.`,
 });
 
-export const droppedNote = (chars: string[]): Note => ({
+export const LINE2_DROPPED =
+  "Line 2 doesn't fit between these rails and this clearance, so we left it out. Narrow them in Advanced or pick a bigger card.";
+
+export const line2DroppedNote = (): Note => ({ level: 'strong', message: LINE2_DROPPED });
+
+export const droppedNote =(chars: string[]): Note => ({
   level: 'warn',
   message: `We left out ${chars.join(' ')}; it can't be cut as a pop-up.`,
 });

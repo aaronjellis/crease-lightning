@@ -19,6 +19,7 @@ import {
 } from './constants';
 import {
   accentsHiddenNote,
+  line2DroppedNote,
   bridgeFix,
   clearFix,
   droppedNote,
@@ -35,12 +36,14 @@ import {
 } from './fixes';
 import { FALLBACK_FAMILY, type FontSet } from './fonts';
 import { cardDims, type Params, type Spacing, type StepDims } from './model';
+import { definedDims, pipeSplit, splitBalanced, tidy } from './lines';
 import { accentSpace, MIN_H_MM, placeOneLine, placeTwoLines, sizeAccent, type AccentPlan } from './place';
 import { buildBlock, measureLine, normaliseText, thinArea, type Block } from './text';
 import type { StepSpec } from './types';
 import { iconById, type Theme } from '../themes';
 
 export type { Fix, Note } from './fixes';
+export { splitBalanced } from './lines';
 
 export interface Layout {
   steps: StepSpec[];
@@ -89,36 +92,10 @@ const sAt = (m: Metrics, cap: number): number => Math.max(PLINTH_MIN_MM, m.descP
 const capFromHeight = (m: Metrics, sMax: number): number =>
   m.topPerCap > 0 ? Math.min((sMax - PLINTH_MIN_MM) / m.topPerCap, sMax / (m.descPerCap + m.topPerCap)) : Infinity;
 
-/** Spaces collapsed and trimmed. */
-const tidy = (t: string): string => t.replace(/ +/g, ' ').trim();
-
-/**
- * Splits at the space that makes the wider half narrowest. Null when there is no space.
- */
-export function splitBalanced(text: string, measure: (t: string) => number): [string, string] | null {
-  let best: [string, string] | null = null;
-  let bestW = Infinity;
-  for (let i = text.indexOf(' '); i >= 0; i = text.indexOf(' ', i + 1)) {
-    const a = text.slice(0, i).trim();
-    const b = text.slice(i + 1).trim();
-    if (!a || !b) continue;
-    const w = Math.max(measure(a), measure(b));
-    if (w < bestW) [best, bestW] = [[a, b], w];
-  }
-  return best;
-}
 
 /** Where a block's window starts along the spine: every window is centred on its strip. */
 export function windowY0(step: StepSpec, block: Block): number {
   return (step.y0 + step.y1) / 2 - (bounds(block.window)?.w ?? 0) / 2;
-}
-
-/** `|` in line 1 is the saved line break, used when line 2 is empty. */
-function pipeSplit(line1: string, line2: string): [string, string] {
-  const i = line1.indexOf('|');
-  const clean = (t: string) => t.replace(/\|/g, ' ');
-  if (i < 0 || line2.trim()) return [clean(line1), clean(line2)];
-  return [line1.slice(0, i), clean(line1.slice(i + 1))];
 }
 
 export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blade' | 'laser', opts: FitOptions = {}): Layout {
@@ -213,13 +190,38 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
     if (tidy(kept.text)) lines.push({ id: lines.length ? 'l2' : 'l1', text: tidy(kept.text), font });
   });
   if (!lines.length) return empty();
+
+  // Rails: under 5 mm they widen to 5 mm; wide ones narrow to 5 mm when a line can't reach the floor
+  // cap between them. If line 2 still can't, it is left out with a strong note.
+  let rail1 = railFor('l1');
+  let rail2 = lines.length === 2 ? railFor('l2') : 0;
+  const floorInk = (line: Line) => measure(line.text, line.font, CAP_FLOOR_MM).inkWPerCap * CAP_FLOOR_MM;
+  const room1 = () => L - 2 * MARGIN_MM - 2 * rail1 - 2 * c;
+  const room2 = () => room1() - 2 * rail2;
+  // Narrowing happens only when the line can't reach the floor cap otherwise, so undoing it can't be
+  // honoured: the rails still narrow, with a warning in place of the fix.
+  const narrow = (id: LineId, rail: number): number => {
+    if (rail <= RAIL_MM) return rail;
+    if (ov(`rail:${id}`)) notes.push(undone(`rail:${id}`, 'narrow'));
+    else fixes.push(railFix(id, 'narrow'));
+    return RAIL_MM;
+  };
+  if (room1() < floorInk(lines[0])) rail1 = narrow('l1', rail1);
+  if (lines.length === 2 && room2() < floorInk(lines[1])) {
+    rail2 = narrow('l2', rail2);
+    if (room2() < floorInk(lines[1])) rail1 = narrow('l1', rail1);
+    if (room2() < floorInk(lines[1])) {
+      lines.pop();
+      rail2 = 0;
+      notes.push(line2DroppedNote());
+      for (let i = fixes.length - 1; i >= 0; i--) if (fixes[i].id.endsWith(':l2')) fixes.splice(i, 1);
+    }
+  }
   const two = lines.length === 2;
   const [L1, L2] = lines;
 
   // 3. Step dims: the size table scaled by W / 127, Advanced on top, then the fit fixes.
-  const rail1 = railFor('l1');
-  const rail2 = two ? railFor('l2') : 0;
-  const accRail = Math.max(p.advanced.railMm, RAIL_MM);
+  const accRail = Math.max(RAIL_MM, two ? rail2 : rail1);
   const avail1 = L - 2 * MARGIN_MM - 2 * rail1 - 2 * c;
   const avail2 = L - 2 * MARGIN_MM - 2 * rail1 - 2 * rail2 - 2 * c;
   const m1 = measure(L1.text, L1.font);
@@ -294,7 +296,7 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
         notes.push(undone('clear:l2'));
         front2 = false;
         // The child's back hinge must still sit on line 1's riser.
-        dims2 = { ...dims2, h: Math.max(1, Math.min(dims2.h, dims1.h - WEB_MM)) };
+        dims2 = { ...dims2, h: Math.max(MIN_H_MM, Math.min(dims2.h, dims1.h - WEB_MM)) };
       } else {
         let changed = false;
         const h1Max = W - MARGIN_MM - dims1.d - sKeep(m1, capW1);
@@ -353,14 +355,21 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
     );
   }
   const solve = (line: Line, m: Metrics, sMax: number, avail: number, capW: number): Block => {
-    const capH = capFromHeight(m, sMax);
-    let cap = Math.min(capH, capW);
-    // Never zero or negative: an s limit under the floor (undone fixes only) stops at 3 mm.
-    // A positive cap from width under the floor stands (a longer line would run off the card).
-    if (!(cap >= CAP_FLOOR_MM)) cap = capW > 0 && capW < CAP_FLOOR_MM ? capW : CAP_FLOOR_MM;
+    // Never under the 3 mm floor, so never zero or negative. The one exception is a positive cap from
+    // width: a line too long for the card even at 3 mm (rails already narrowed) would run off its ends.
+    const lowest = capW > 0 && capW < CAP_FLOOR_MM ? capW : CAP_FLOOR_MM;
+    let cap = Math.max(lowest, Math.min(capFromHeight(m, sMax), capW));
+    if (!Number.isFinite(cap)) cap = lowest;
     let block = buildBlock(line.text, line.font, cap, sp, c);
-    for (let i = 0; i < 3 && (block.inkW > avail + 1e-9 || (cap > CAP_FLOOR_MM && block.s > sMax + 1e-9)); i++) {
-      cap *= Math.min(avail / block.inkW, block.s > sMax ? sMax / block.s : 1) * 0.999;
+    for (let i = 0; i < 3; i++) {
+      const wide = block.inkW > avail + 1e-9;
+      const tall = block.s > sMax + 1e-9;
+      if (!wide && !tall) break;
+      const ratio = Math.min(wide ? avail / block.inkW : 1, tall ? sMax / block.s : 1) * 0.999;
+      // A non-positive ratio (no room at all) or a cap already at the floor can't shrink further.
+      const next = ratio > 0 ? Math.max(lowest, cap * ratio) : cap;
+      if (!(next < cap)) break;
+      cap = next;
       block = buildBlock(line.text, line.font, cap, sp, c);
     }
     return block;
@@ -404,9 +413,10 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
       else fixes.push(bridgeFix(n, line.id));
     }
   }
-  const smallest = Math.min(...lines.map((l) => blocks[l.id].capMm));
-  if (smallest < STRONG_CAP_MM) notes.push(smallNote('strong'));
-  else if (smallest < WARN_CAP_MM) notes.push(smallNote('warn'));
+  // Any text cap under 7 mm (or not a finite number) carries the strong note.
+  const caps = lines.map((l) => blocks[l.id].capMm);
+  if (caps.some((x) => !(x >= STRONG_CAP_MM))) notes.push(smallNote('strong'));
+  else if (caps.some((x) => x < WARN_CAP_MM)) notes.push(smallNote('warn'));
   if (opts.strokeCheck ?? true) {
     const minStroke = target === 'laser' ? MIN_STROKE_LASER_MM : MIN_STROKE_BLADE_MM;
     for (const line of lines) {
@@ -418,13 +428,4 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
   const seen = new Set<string>();
   const uniqueNotes = notes.filter((x) => !seen.has(x.message) && seen.add(x.message));
   return { steps, blocks, lines: lines.map((l) => l.text), fixes, notes: uniqueNotes };
-}
-
-/** Advanced dims with undefined fields dropped, so they don't hide the defaults. */
-function definedDims(dims: StepDims | undefined): StepDims {
-  const out: StepDims = {};
-  if (dims?.d !== undefined) out.d = dims.d;
-  if (dims?.h !== undefined) out.h = dims.h;
-  if (dims?.s !== undefined) out.s = dims.s;
-  return out;
 }
