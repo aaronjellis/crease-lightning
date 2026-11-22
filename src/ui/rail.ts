@@ -18,8 +18,8 @@ function iconSvg(id: string): string {
 }
 
 function thumb(t: Theme): HTMLElement {
-  const art = t.accents.length
-    ? svgFrom(iconSvg(t.accents[0]))
+  const art = t.motifs.length
+    ? svgFrom(iconSvg(t.motifs[0].icon))
     : h('span', { class: 'thumb-letter', 'aria-hidden': 'true', text: t.lines[0].charAt(0) });
   return h('span', { class: 'thumb', style: `--thumb-bg:${t.colours.jacket};--thumb-fg:${t.colours.inner}` }, art);
 }

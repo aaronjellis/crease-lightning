@@ -93,8 +93,6 @@ export const SPACING: Record<Spacing, string> = { tight: 'Tight', normal: 'Norma
 
 export const DECORATIONS = {
   title: 'Decorations',
-  accents: 'Pop-up icons',
-  accentsHint: 'Icons that stand up beside your message.',
   motifs: 'Cut-out shapes',
   motifsHint: 'Small shapes cut into the pages.',
   none: (theme: string) => `The ${theme} theme has no decorations.`,

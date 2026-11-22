@@ -6,7 +6,6 @@ export const wedding: Theme = {
   lines: ['JUST MARRIED', 'ALEX & SAM'],
   font: 'Arvo',
   colours: { inner: '#fffdf7', jacket: '#7d9a86' },
-  accents: ['church', 'heart-stand'],
   motifs: [
     { icon: 'heart', slot: 'back-top-row', minMm: 9, maxMm: 14, count: 5 },
     { icon: 'sparkle-star', slot: 'base-front-left', minMm: 9, maxMm: 13, count: 2 },

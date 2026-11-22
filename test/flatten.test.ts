@@ -57,8 +57,8 @@ const wasteOf = (steps: StepSpec[]) => union(steps.map((s) => mapBlock(layout.bl
 const motifHoles = (piece: Piece) => piece.holes.filter((h) => area(intersect(h, footprints)) < 1e-6);
 
 describe('flatten: Birthday 5 × 7 default', () => {
-  test('the layout is two lines with both accents', () => {
-    expect(layout.steps.map((s) => s.id).sort()).toEqual(['a1', 'a2', 'l1', 'l2']);
+  test('the layout is two lines and nothing else', () => {
+    expect(layout.steps.map((s) => s.id).sort()).toEqual(['l1', 'l2']);
   });
 
   test('the inner sheet is 254 × 178', () => {
@@ -127,7 +127,7 @@ describe('flatten: Birthday 5 × 7 default', () => {
     const { A } = foldU(root, layout.steps);
     const spans = foldSpans(inner, 'valley', A + W);
     const kids = children(root.id);
-    expect(kids.length).toBe(3);
+    expect(kids.map((k) => k.id)).toEqual(['l2']);
     for (const k of kids) {
       for (const y of [k.y0 + 0.1, (k.y0 + k.y1) / 2, k.y1 - 0.1]) expect(covers(spans, y), `${k.id} at ${y}`).toBe(false);
     }
@@ -242,7 +242,7 @@ describe('flatten: Birthday 5 × 7 default', () => {
 });
 
 describe('flatten: other layouts', () => {
-  test('one line: the spine stops at the root and the A valley at the accents', () => {
+  test('one line: the spine stops at the root and the A valley at the children', () => {
     const p = { ...P0, line2: '', line1: 'HELLO' };
     const l = fit(p);
     expect(l.steps.some((s) => s.role === 'line2')).toBe(false);

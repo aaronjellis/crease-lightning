@@ -6,7 +6,6 @@ export const newYear: Theme = {
   lines: ['HAPPY NEW YEAR', '2027'],
   font: 'Arvo',
   colours: { inner: '#ffffff', jacket: '#1b2a49' },
-  accents: ['wine-glass', 'hourglass'],
   motifs: [
     { icon: 'star', slot: 'back-top-row', minMm: 9, maxMm: 14, count: 5 },
     { icon: 'sparkle-star', slot: 'base-front-left', minMm: 9, maxMm: 13, count: 2 },

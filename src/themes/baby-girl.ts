@@ -6,7 +6,6 @@ export const babyGirl: Theme = {
   lines: ['WELCOME', 'BABY GIRL'],
   font: 'Arvo',
   colours: { inner: '#ffffff', jacket: '#f4a6c0' },
-  accents: ['crib', 'baby-face'],
   motifs: [
     { icon: 'heart', slot: 'back-top-row', minMm: 9, maxMm: 14, count: 5 },
     { icon: 'cloud', slot: 'base-front-left', minMm: 9, maxMm: 14, count: 1 },

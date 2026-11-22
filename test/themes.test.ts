@@ -7,7 +7,6 @@ import { MIN_STROKE_BLADE_MM, PLINTH_MIN_MM } from '../src/core/constants';
 import { buildIconBlock, thinArea } from '../src/core/text';
 import { ICONS, THEMES, iconById, loadIcon, themeById } from '../src/themes';
 
-const accentIds = new Set(THEMES.flatMap((t) => t.accents));
 /** How many holes are narrower than 1 mm: those that vanish under a 0.5 mm inward offset. */
 const narrowHoles = (p: Poly): number =>
   p.filter((c) => !outerCount([c])).filter((h) => area(offset([[...h].reverse()], -0.5, 0.05)) <= 1e-6).length;
@@ -50,14 +49,6 @@ describe('icons', () => {
     expect(outerCount(union([blk.letters, blk.plinth]))).toBe(1);
   });
 
-  test.each([...accentIds])('accent %s has a base at least 3 mm wide at its minimum height', (id) => {
-    const p = atMin(id);
-    const b = bounds(p)!;
-    const strip: Poly = [[{ x: b.x - 1, y: 0 }, { x: b.x + b.w + 1, y: 0 }, { x: b.x + b.w + 1, y: 0.3 }, { x: b.x - 1, y: 0.3 }]];
-    const foot = bounds(intersect(p, strip))!;
-    expect(foot.w).toBeGreaterThanOrEqual(PLINTH_MIN_MM);
-  });
-
   test('loadIcon flips y so the SVG top ends up at the top', () => {
     const icon = loadIcon('<svg viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="2"/><rect x="0" y="0" width="2" height="10"/></svg>', {
       id: 't', minHeightMm: 1, source: 's', licence: 'l',
@@ -73,9 +64,8 @@ describe('icons', () => {
 });
 
 describe('themes', () => {
-  test('every accent and motif icon resolves, and motif sizes respect the icon minimum', () => {
+  test('every motif icon resolves, and motif sizes respect the icon minimum', () => {
     for (const t of THEMES) {
-      for (const a of t.accents) expect(iconById(a)).toBeTruthy();
       for (const m of t.motifs) {
         const i = iconById(m.icon);
         expect(m.minMm).toBeGreaterThanOrEqual(i.minHeightMm);
@@ -95,13 +85,11 @@ describe('themes', () => {
     const t = themeById('birthday');
     expect(t.lines).toEqual(['HAPPY BIRTHDAY', 'SAM']);
     expect(t.font).toBe('Arvo');
-    expect(t.accents).toEqual(['balloon', 'cake']);
     expect(t.motifs.length).toBeGreaterThan(0);
   });
 
-  test('Blank has no accents and no motifs', () => {
+  test('Blank has no motifs', () => {
     const t = themeById('blank');
-    expect(t.accents).toEqual([]);
     expect(t.motifs).toEqual([]);
     expect(t.lines).toEqual(['HELLO', '']);
     expect(t.font).toBe('Arvo');
@@ -130,10 +118,9 @@ describe('launch themes', () => {
     love: { lines: ['LOVE YOU', 'ALWAYS'], jacket: '#c2185b' },
   };
 
-  test('there are ten themed cards plus Blank, each with two accents and two or three motif kinds', () => {
+  test('there are ten themed cards plus Blank, each with two or three motif kinds', () => {
     expect(THEMES.map((t) => t.id).sort()).toEqual([...Object.keys(EXPECTED), 'blank'].sort());
     for (const t of THEMES.filter((x) => x.id !== 'blank')) {
-      expect(t.accents.length, t.id).toBe(2);
       const kinds = new Set(t.motifs.map((m) => m.icon)).size;
       expect(kinds, t.id).toBeGreaterThanOrEqual(2);
       expect(kinds, t.id).toBeLessThanOrEqual(3);
@@ -162,11 +149,11 @@ describe('launch themes', () => {
     expect(t.font).toBe(expected);
   });
 
-  test.each(THEMES.filter((t) => t.accents.length).map((t) => t.id))('%s shows both accents on a 5 x 7 card with its default lines', (id) => {
+  test.each(THEMES.map((t) => t.id))('%s has only message steps on a 5 x 7 card with its default lines', (id) => {
     const t = themeById(id);
     const p = applyTheme(defaultParams('en-US'), t, BIRTHDAY_DEFAULTS);
     const layout = fitLayout(p, fonts, t, 'blade', { strokeCheck: false });
-    expect(Object.keys(layout.blocks)).toEqual(expect.arrayContaining(['a1', 'a2']));
+    expect(layout.steps.every((s) => s.role === 'line1' || s.role === 'line2')).toBe(true);
     expect(layout.notes.map((n) => n.message).join()).not.toContain('left out');
     expect(layout.fixes).toEqual([]);
   });

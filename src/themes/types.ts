@@ -33,7 +33,5 @@ export interface Theme {
   lines: [string, string];
   font: string;
   colours: { inner: string; jacket: string };
-  /** The two pop-up icons that stand on the steps, or none. */
-  accents: [string, string] | [];
   motifs: Motif[];
 }
