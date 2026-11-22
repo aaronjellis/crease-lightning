@@ -27,7 +27,7 @@ const BUNDLED_FILES: Record<string, string> = {
   Rokkitt: 'Rokkitt-900.ttf',
 };
 
-const FALLBACK_FAMILY = 'Arvo';
+export const FALLBACK_FAMILY = 'Arvo';
 
 export interface FontSet {
   get(family: string): TextFont | undefined;
