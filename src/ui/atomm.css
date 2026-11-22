@@ -1,0 +1,23 @@
+/* Atomm host overrides. The platform draws the top bar, so this page has none; z-index stays at 3 or below. */
+.cl-app[data-host='atomm'] .topbar { display: none; }
+.cl-app[data-host='atomm'] .workspace { height: 100vh; height: 100dvh; }
+.cl-app[data-host='atomm'] .settings { display: flex; flex-direction: column; }
+.cl-app[data-host='atomm'] .settings > :not(.atomm-footer) { flex: none; }
+.atomm-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.atomm-footer .export-note { max-width: none; text-align: left; }
+.atomm-footer [data-atomm-export-button] { display: grid; }
+.atomm-footer .export-fallback { width: 100%; }
+
+@media (max-width: 759px) {
+  .cl-app[data-host='atomm'] { padding-bottom: 0; }
+}

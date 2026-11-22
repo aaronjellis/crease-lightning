@@ -9,7 +9,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "contact-sheet": "vite-node scripts/contact-sheet.ts"
+    "contact-sheet": "vite-node scripts/contact-sheet.ts",
+    "build:atomm": "tsc --noEmit && vite build --mode atomm",
+    "package:atomm": "npm run build:atomm && node scripts/package-atomm.mjs"
   },
   "dependencies": {
     "clipper2-js": "^1.2.4",
