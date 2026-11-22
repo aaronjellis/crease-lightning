@@ -26,7 +26,7 @@ export const love: Theme = {
       ],
     },
     {
-      id: 'roses',
+      id: 'tulips',
       name: 'Tulips',
       border: 'scallop-edge',
       items: [
