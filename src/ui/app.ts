@@ -14,6 +14,7 @@ import { decodeLink } from '../core/codec';
 import { loadFont as realLoadFont, type LoadedFont } from '../core/fonts';
 import type { Decor } from '../core/decor/types';
 import { defaultParams, type Params } from '../core/model';
+import { iconById, themeById } from '../themes';
 import { mainThreadBuilder, moduleWorkersSupported, workerBuilder, type Builder } from './builder';
 import { takeLinkFragment } from './linkFragment';
 import { CardScene } from '../view3d/scene';
@@ -135,7 +136,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
 
   /** The selected decoration; Flat view editing and the chips share it. */
   let selected: string | null = null;
-  /** The decor from before the last theme change or style pick, for Undo; not in params or the link. */
+  /** The decor from before the last theme change, style pick or Unpin all, for Undo; not in params or the link. */
   let decorStash: Decor | null = null;
   /** Committed moves this session; sent once when the page hides. */
   let moves = 0;
@@ -178,7 +179,10 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
       const restore = decorStash;
       if (!restore) return;
       selected = null;
-      update({ ...params, decor: restore }, false, false);
+      // After a theme change the old style isn't one of this theme's: no tile could show it pressed,
+      // and the codec would drop it on reload. Keep the items and border, as a custom design.
+      const style = restore.style !== null && themeById(params.theme).styles.some((s) => s.id === restore.style) ? restore.style : null;
+      update({ ...params, decor: { ...restore, style } }, false, false);
     },
     canDecorUndo: () => decorStash !== null,
     noteMove: () => void moves++,
@@ -232,7 +236,12 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   });
 
   // ---------------------------------------------------------------- layout
-  const files = fileActions({ host, params: () => params, open: (p) => update(p, false), notify, saveBlob: d.saveBlob });
+  /** A whole new design (a file, or `setParams`): ids are positional, so the selection goes. */
+  const load = (p: Params) => {
+    selected = null;
+    update(p, false);
+  };
+  const files = fileActions({ host, params: () => params, open: load, notify, saveBlob: d.saveBlob });
   const brand = h(
     'div',
     { class: 'brand' },
@@ -276,6 +285,23 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
     canvas.show(next, geometry);
     canvas.setPlaceholder(next.notes.some((n) => n.message === EMPTY_MESSAGE_NOTE));
     renderAll();
+    if (geometry) warmIcons(next);
+  }
+
+  /**
+   * The worker builds the icons' polys in its own thread, so this one makes each the first time a
+   * drag or selection reads it (1 to 30 ms). Read them in idle time instead, one icon per callback.
+   */
+  function warmIcons(next: Card) {
+    const queue = [...new Set(next.decor.items.map((i) => i.icon))];
+    const idle = (f: () => void) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(f) : setTimeout(f, 50));
+    const step = () => {
+      const id = queue.shift();
+      if (destroyed || id === undefined) return;
+      void iconById(id).poly;
+      if (queue.length) idle(step);
+    };
+    if (queue.length) idle(step);
   }
 
   function update(next: Params, typing: boolean, undoable = false) {
@@ -367,7 +393,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
       return card;
     },
     getParams: () => params,
-    setParams: (p) => update(p, false),
+    setParams: load,
     whenIdle: () =>
       new Promise<void>((resolve) => {
         waiters.push(resolve);

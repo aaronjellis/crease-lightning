@@ -1,11 +1,12 @@
 /**
  * Decorations: style tiles, the border (a switch and a pattern), a chip per illustration with a Size
- * slider for the selected one, Add, Shuffle, Unpin all, and Undo. Picking a style or changing the
- * theme can be undone (the stash lives in the app); the rest edit the decor in place.
+ * slider for the selected one, Add, Shuffle, Unpin all, and Undo. Picking a style, changing the
+ * theme, and Unpin all can be undone (the stash lives in the app); the rest edit the decor in place.
+ * Add turns off at MAX_ITEMS, the most a link, file or autosave keeps.
  */
 import { addItem, decorFromStyle, removeItem, resizeItem, shuffle, unpinAll } from '../../core/decor/model';
 import type { Decor } from '../../core/decor/types';
-import { MAX_ITEM_MM } from '../../core/codec';
+import { MAX_ITEM_MM, MAX_ITEMS } from '../../core/codec';
 import type { Params } from '../../core/model';
 import { BORDERS, iconById, themeById, type Theme } from '../../themes';
 import type { Ctx, View } from '../context';
@@ -108,6 +109,8 @@ export function decorationsCard(ctx: Ctx): View {
 
   const addDialog = addIllustrationDialog((iconId) => {
     const p = ctx.params();
+    // Links, files and the autosave keep MAX_ITEMS: an item past it would vanish from all three.
+    if (p.decor.items.length >= MAX_ITEMS) return;
     const next = addItem(p.decor, iconId);
     setDecor(next);
     ctx.select(next.items[next.items.length - 1].id);
@@ -122,7 +125,7 @@ export function decorationsCard(ctx: Ctx): View {
     track('decor_shuffled');
   });
   const unpin = button(DECORATIONS.unpinAll, 'decor-unpin');
-  unpin.addEventListener('click', () => setDecor(unpinAll(ctx.params().decor)));
+  unpin.addEventListener('click', () => setDecor(unpinAll(ctx.params().decor), { undoable: true }));
   const undo = h('button', { type: 'button', class: 'link-button decor-undo', hidden: true }, DECORATIONS.undo);
   undo.addEventListener('click', () => ctx.decorUndo());
 
@@ -151,7 +154,8 @@ export function decorationsCard(ctx: Ctx): View {
         const pressed = t.id === p.decor.style;
         t.el.setAttribute('aria-pressed', String(pressed));
         const name = i === 0 ? DECORATIONS.none : theme.styles[i - 1].name;
-        const label = pressed && custom ? DECORATIONS.custom(name) : name;
+        // No style with a border or items is the user's own design: "Custom", not "None (custom)".
+        const label = pressed && custom ? (i === 0 ? DECORATIONS.customLabel : DECORATIONS.custom(name)) : name;
         if (t.el.textContent !== label) t.el.textContent = label;
       });
       undo.hidden = !ctx.canDecorUndo();
@@ -175,6 +179,10 @@ export function decorationsCard(ctx: Ctx): View {
       const item = p.decor.items.find((i) => i.id === selected);
       sizeRow.hidden = !item;
       unpin.disabled = !p.decor.items.some((i) => i.at);
+      const full = p.decor.items.length >= MAX_ITEMS;
+      add.disabled = full;
+      if (full) add.setAttribute('title', DECORATIONS.addFull(MAX_ITEMS));
+      else add.removeAttribute('title');
       if (item) {
         const icon = iconById(item.icon);
         const shown = item.sizeMm ?? card?.decor.items.find((i) => i.id === item.id)?.sizeMm ?? (item.minMm + item.maxMm) / 2;

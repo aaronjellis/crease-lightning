@@ -48,7 +48,10 @@ interface Drag {
   mode: 'move' | 'resize';
   pointerId: number;
   start: { x: number; y: number };
-  /** Item centre minus the pointer, in flat mm, so the item doesn't jump to the pointer. */
+  /**
+   * What the press grabbed minus the pointer, in flat mm (the item's centre for a move, its box
+   * corner for a resize), so the item doesn't jump to the pointer.
+   */
   offset: Pt;
   from: Pose;
   active: boolean;
@@ -119,12 +122,17 @@ export function decorEditor(ctx: Ctx): DecorEditor {
     else drawGhost(pending, true);
   };
 
-  /** Stores a pose the check passed: a move pins it (at its drawn size), a resize fixes the size. */
+  /**
+   * Stores a pose the check passed, pinned where it is drawn: a move at its drawn size, a resize at
+   * its new size. An unpinned resize would re-run the scatter at the new size, where an earlier
+   * candidate can win and the item jumps.
+   */
   const commit = (p: Pose, kind: 'move' | 'resize') => {
     const { W, L } = size();
     const params = ctx.params();
+    const pin = toPin(p.page, p.centre, W, L);
     const decor =
-      kind === 'move' ? moveItem(params.decor, p.id, toPin(p.page, p.centre, W, L), p.sizeMm) : resizeItem(params.decor, p.id, p.sizeMm);
+      kind === 'move' ? moveItem(params.decor, p.id, pin, p.sizeMm) : moveItem(resizeItem(params.decor, p.id, p.sizeMm), p.id, pin);
     pending = p;
     if (kind === 'move') ctx.noteMove();
     ctx.update({ ...params, decor });
@@ -148,9 +156,10 @@ export function decorEditor(ctx: Ctx): DecorEditor {
       const centre = { x: p.x + d.offset.x, y: p.y + d.offset.y };
       return { ...d.from, page: pageOf(centre.x), centre };
     }
-    // Resize from the box corner: the size whose box corner sits under the pointer.
+    // Resize from the box corner: the size whose box corner sits where the press put it.
+    const corner = { x: p.x + d.offset.x, y: p.y + d.offset.y };
     const aspect = iconExtent(d.from.icon, 1).w;
-    const raw = Math.max(2 * Math.abs(p.x - d.from.centre.x), (2 * Math.abs(p.y - d.from.centre.y)) / aspect);
+    const raw = Math.max(2 * Math.abs(corner.x - d.from.centre.x), (2 * Math.abs(corner.y - d.from.centre.y)) / aspect);
     const sizeMm = Math.min(MAX_ITEM_MM, Math.max(iconById(d.from.icon).minHeightMm, Math.round(raw / RESIZE_STEP_MM) * RESIZE_STEP_MM));
     return { ...d.from, sizeMm };
   };
@@ -169,7 +178,15 @@ export function decorEditor(ctx: Ctx): DecorEditor {
   };
 
   function onMove(e: PointerEvent) {
-    if (!drag || e.pointerId !== drag.pointerId || !card) return;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    // The button came up where we didn't hear it (outside the window, capture lost to a rebuild).
+    if (e.pointerType === 'mouse' && e.buttons === 0) return cancelDrag();
+    follow(e);
+  }
+
+  /** Moves the candidate to the pointer and checks it. */
+  function follow(e: PointerEvent) {
+    if (!drag || !card) return;
     if (!drag.active && Math.hypot(e.clientX - drag.start.x, e.clientY - drag.start.y) < DRAG_SLOP_PX) return;
     const p = toFlat(e);
     if (!p) return;
@@ -183,7 +200,7 @@ export function decorEditor(ctx: Ctx): DecorEditor {
   function onUp(e: PointerEvent) {
     if (!drag || e.pointerId !== drag.pointerId) return;
     // The release point counts, wherever the last move event left the candidate.
-    onMove(e);
+    follow(e);
     const d = drag;
     endDrag();
     if (d.active && d.ok && d.candidate) commit(d.candidate, d.mode);
@@ -206,11 +223,14 @@ export function decorEditor(ctx: Ctx): DecorEditor {
     const p = toFlat(e);
     if (!from || !p) return;
     ctx.select(id);
+    // A resize grabs the box's bottom-right corner as drawn, where the handle sits.
+    const { h: bh, w: bw } = iconExtent(from.icon, atLeastMin(from.icon, from.sizeMm));
+    const grab = resize ? { x: from.centre.x + bh / 2, y: from.centre.y - bw / 2 } : from.centre;
     drag = {
       mode: resize ? 'resize' : 'move',
       pointerId: e.pointerId,
       start: { x: e.clientX, y: e.clientY },
-      offset: { x: from.centre.x - p.x, y: from.centre.y - p.y },
+      offset: { x: grab.x - p.x, y: grab.y - p.y },
       from,
       active: false,
       candidate: null,
@@ -255,7 +275,9 @@ export function decorEditor(ctx: Ctx): DecorEditor {
       const stored = ctx.params().decor.items.find((i) => i.id === id)?.sizeMm;
       const base = pending?.id === id ? pending.sizeMm : (stored ?? from.sizeMm);
       const sizeMm = Math.min(MAX_ITEM_MM, Math.max(iconById(from.icon).minHeightMm, base + grow * RESIZE_STEP_MM));
-      if (sizeMm !== base) commit({ ...from, sizeMm }, 'resize');
+      // Like the handle: only a size that fits where the item is drawn.
+      const next = { ...from, sizeMm };
+      if (sizeMm !== base && fits(next)) commit(next, 'resize');
       return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -340,6 +362,15 @@ export function decorEditor(ctx: Ctx): DecorEditor {
       hits.clear();
       outline = handle = ghost = null;
       if (drag && !nextCard.decor.items.some((i) => i.id === drag!.from.id)) endDrag();
+      // The old sheet held the pointer capture and is gone: the new one takes it, so the release
+      // still reaches us even outside the window.
+      if (drag) {
+        try {
+          next.setPointerCapture(drag.pointerId);
+        } catch {
+          // The pointer is no longer active (or synthetic): the buttons check in onMove catches it.
+        }
+      }
 
       const items = nextCard.decor.items;
       if (items.length) {

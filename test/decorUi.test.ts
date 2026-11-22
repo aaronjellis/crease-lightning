@@ -5,7 +5,8 @@ import { defaultParams } from '../src/core/model';
 import { area, intersect } from '@kerfuffle/engine/geom';
 import { MARGIN_MM } from '../src/core/constants';
 import { iconExtent, toPin } from '../src/core/decor/geometry';
-import { decorFromStyle, moveItem } from '../src/core/decor/model';
+import { MAX_ITEMS } from '../src/core/codec';
+import { addItem, decorFromStyle, moveItem } from '../src/core/decor/model';
 import { canPlace } from '../src/core/decor/place';
 import { iconById, themeById } from '../src/themes';
 import { mountApp, type AppApi, type SceneLike } from '../src/ui/app';
@@ -73,14 +74,102 @@ describe('Decorations card', () => {
     expect(undo().hidden).toBe(true);
   });
 
-  test('switching theme stashes the decor; Undo brings it back', () => {
+  test('switching theme stashes the decor; Undo brings back its items and border, with no style', () => {
     const before = app.getParams().decor;
     click($('[data-ph-capture-attribute-theme="christmas"]'));
     expect(app.getParams().theme).toBe('christmas');
     expect(app.getParams().decor.style).toBe('holly');
     click(undo());
-    expect(app.getParams().decor).toEqual(before);
+    // Confetti is a Birthday style: under Christmas no tile could show it, and a reload would drop it.
+    expect(app.getParams().decor).toEqual({ ...before, style: null });
     expect(undo().hidden).toBe(true);
+    expect(tile('none').getAttribute('aria-pressed')).toBe('true');
+    expect(tile('none').textContent).toBe('Custom');
+  });
+
+  test('Undo after a style pick keeps the style when it is one of the theme’s', () => {
+    click(byText('Balloons'));
+    click(undo());
+    expect(app.getParams().decor.style).toBe('confetti');
+  });
+
+  test('no style with items or a border reads Custom; with neither, None', () => {
+    app.setParams({ ...app.getParams(), decor: { ...seedDecor('confetti'), style: null } });
+    expect(tile('none').getAttribute('aria-pressed')).toBe('true');
+    expect(tile('none').textContent).toBe('Custom');
+    app.setParams({ ...app.getParams(), decor: { style: null, border: 'dot-row', seed: 1, items: [] } });
+    expect(tile('none').textContent).toBe('Custom');
+    click(tile('none'));
+    expect(tile('none').textContent).toBe('None');
+  });
+
+  test('Unpin all can be undone', () => {
+    const d = app.getParams().decor;
+    const pinned = { ...d, items: d.items.map((i) => ({ ...i, at: { page: 'base' as const, u: 0.5, v: 0.5 } })) };
+    app.setParams({ ...app.getParams(), decor: pinned });
+    click(byText('Unpin all'));
+    expect(app.getParams().decor.items.some((i) => i.at)).toBe(false);
+    expect(undo().hidden).toBe(false);
+    click(undo());
+    expect(app.getParams().decor).toEqual(pinned);
+  });
+
+  describe(`Add stops at ${MAX_ITEMS} illustrations`, () => {
+    const withItems = (n: number) => {
+      let d = { ...seedDecor('confetti'), items: [] as ReturnType<typeof seedDecor>['items'] };
+      for (let k = 0; k < n; k++) d = addItem(d, 'star');
+      app.setParams({ ...app.getParams(), decor: d });
+    };
+    const addBtn = () => $<HTMLButtonElement>('.decor-add-open');
+
+    test(`at ${MAX_ITEMS} Add is off and says why`, () => {
+      withItems(MAX_ITEMS);
+      expect(addBtn().disabled).toBe(true);
+      expect(addBtn().getAttribute('title')).toBe(`A card holds up to ${MAX_ITEMS} illustrations. Remove one to add another.`);
+    });
+
+    test('one fewer, Add is on and adds the last one, then turns off', () => {
+      withItems(MAX_ITEMS - 1);
+      expect(addBtn().disabled).toBe(false);
+      expect(addBtn().hasAttribute('title')).toBe(false);
+      click(addBtn());
+      click($('.decor-add [data-ph-capture-attribute-icon="stork"]'));
+      expect(app.getParams().decor.items).toHaveLength(MAX_ITEMS);
+      expect(addBtn().disabled).toBe(true);
+    });
+
+    test('a pick that arrives at the cap adds nothing', () => {
+      withItems(MAX_ITEMS - 1);
+      click(addBtn());
+      app.setParams({ ...app.getParams(), decor: addItem(app.getParams().decor, 'star') });
+      click($('.decor-add [data-ph-capture-attribute-icon="stork"]'));
+      expect(app.getParams().decor.items).toHaveLength(MAX_ITEMS);
+    });
+  });
+
+  test('loading a design clears the selection', () => {
+    click($(`[data-ph-capture-attribute-item="${app.getParams().decor.items[1].id}"] .decor-chip-select`));
+    expect($('input[name="decor-size"]').closest('[hidden]')).toBeNull();
+    app.setParams({ ...app.getParams(), decor: seedDecor('balloons') });
+    expect($('input[name="decor-size"]').closest('[hidden]')).not.toBeNull();
+    expect($$('.decor-chip-select[aria-pressed="true"]')).toHaveLength(0);
+  });
+
+  test('after a build, idle time reads each placed icon’s poly', async () => {
+    const queued: (() => void)[] = [];
+    vi.stubGlobal('requestIdleCallback', (f: () => void) => queued.push(f));
+    try {
+      app.setParams({ ...app.getParams(), decor: seedDecor('balloons') });
+      await app.whenIdle();
+      const icons = [...new Set(app.getCard().decor.items.map((i) => i.icon))];
+      expect(icons.length).toBeGreaterThan(0);
+      const reads = icons.map((id) => vi.spyOn(iconById(id), 'poly', 'get'));
+      while (queued.length) queued.shift()!();
+      for (const r of reads) expect(r).toHaveBeenCalled();
+      for (const r of reads) r.mockRestore();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test('any other decor change clears the stash', () => {
@@ -454,6 +543,78 @@ describe('Flat view editing', () => {
     pointer(innerSvg(), 'pointerup', client(to));
     const want = Math.max(iconById(it.icon).minHeightMm, Math.round((it.sizeMm - 2) * 2) / 2);
     expect(app.getParams().decor.items.find((i) => i.id === id)!.sizeMm).toBe(want);
+  });
+
+  test('a press beside the handle’s centre grabs the corner: the size follows the motion, not the press point', async () => {
+    const id = await pinFree();
+    const it = app.getCard().decor.items.find((i) => i.id === id)!;
+    const handle = innerSvg().querySelector('.decor-handle')!;
+    const aspect = iconExtent(it.icon, 1).w;
+    const corner = { x: it.centre.x + it.sizeMm / 2, y: it.centre.y - (aspect * it.sizeMm) / 2 };
+    const press = { x: corner.x + 2, y: corner.y - 2 };
+    const to = { x: press.x - 1, y: press.y + aspect };
+    pointer(handle, 'pointerdown', client(press));
+    pointer(innerSvg(), 'pointermove', client({ x: press.x + 10, y: press.y - 10 }));
+    pointer(innerSvg(), 'pointermove', client(to));
+    pointer(innerSvg(), 'pointerup', client(to));
+    const want = Math.max(iconById(it.icon).minHeightMm, Math.round((it.sizeMm - 2) * 2) / 2);
+    expect(app.getParams().decor.items.find((i) => i.id === id)!.sizeMm).toBe(want);
+  });
+
+  test('a resize from the sheet pins the item where it is drawn, so it never jumps', async () => {
+    const { W, L } = size();
+    const balloons = decorFromStyle(birthday, 'balloons', 1);
+    app.setParams({ ...app.getParams(), decor: balloons });
+    await app.whenIdle();
+    let resized = 0;
+    for (const { id } of app.getCard().decor.items) {
+      app.setParams({ ...app.getParams(), decor: balloons });
+      await app.whenIdle();
+      const before = app.getCard().decor.items.find((i) => i.id === id)!;
+      hit(id).focus();
+      key(hit(id), '-');
+      const stored = app.getParams().decor.items.find((i) => i.id === id)!;
+      // At its minimum already: nothing to shrink.
+      if (stored.sizeMm === undefined) continue;
+      resized++;
+      expect(stored.at, id).toEqual(toPin(before.page, before.centre, W, L));
+      await app.whenIdle();
+      const after = app.getCard().decor.items.find((i) => i.id === id)!;
+      expect(after.centre.x, id).toBeCloseTo(before.centre.x, 6);
+      expect(after.centre.y, id).toBeCloseTo(before.centre.y, 6);
+      expect(after.displaced, id).toBe(false);
+    }
+    expect(resized).toBeGreaterThanOrEqual(3);
+  });
+
+  describe('a drag whose release we never heard', () => {
+    const mouse = (el: Element, type: string, at: { clientX: number; clientY: number }, buttons: number) =>
+      el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, button: 0, buttons, pointerType: 'mouse', ...at }));
+
+    test('a mouse move with no button down cancels it: no ghost, and the release commits nothing', () => {
+      const item = placedItem();
+      const to = freeSpot(item);
+      const before = structuredClone(app.getParams());
+      mouse(hit(item.id), 'pointerdown', client(item.centre), 1);
+      mouse(innerSvg(), 'pointermove', client(to), 1);
+      expect(innerSvg().querySelector('.decor-ghost')).not.toBeNull();
+      // Released outside the window: the next move arrives with no buttons.
+      mouse(innerSvg(), 'pointermove', client(to), 0);
+      expect(innerSvg().querySelector('.decor-ghost')).toBeNull();
+      expect(innerSvg().hasAttribute('data-dragging')).toBe(false);
+      mouse(innerSvg(), 'pointerup', client(to), 0);
+      expect(app.getParams()).toEqual(before);
+    });
+
+    test('a mouse drag held down still commits on release', () => {
+      const item = placedItem();
+      const to = freeSpot(item);
+      const { W, L } = size();
+      mouse(hit(item.id), 'pointerdown', client(item.centre), 1);
+      mouse(innerSvg(), 'pointermove', client(to), 1);
+      mouse(innerSvg(), 'pointerup', client(to), 0);
+      expect(app.getParams().decor.items.find((i) => i.id === item.id)!.at).toEqual(toPin('base', to, W, L));
+    });
   });
 
   test("the sheet's delete button removes the selected item and clears the selection", async () => {
