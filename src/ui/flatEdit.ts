@@ -10,6 +10,9 @@
  *
  * A committed edit shows as an ok ghost until the next build lands, and further nudges start from it,
  * so quick key presses add up even while the build is still running.
+ *
+ * The selected item also gets a × button (a real HTML button over the sheet, placed in percentages of
+ * it) that removes it, as Delete does.
  */
 import { polyToSvgPath, type Poly, type Pt } from '@kerfuffle/engine/geom';
 import type { Card } from '../core/build';
@@ -20,7 +23,8 @@ import { canPlace } from '../core/decor/place';
 import type { Page } from '../core/decor/types';
 import { iconById } from '../themes';
 import type { Ctx } from './context';
-import { FLAT } from './strings';
+import { h } from './dom';
+import { DECORATIONS, FLAT } from './strings';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const NUDGE_MM = 1;
@@ -70,6 +74,7 @@ export function decorEditor(ctx: Ctx): DecorEditor {
   let outline: SVGPathElement | null = null;
   let handle: SVGCircleElement | null = null;
   let ghost: SVGPathElement | null = null;
+  const removeBtn = h('button', { type: 'button', class: 'decor-remove' }, '×');
   const hits = new Map<string, SVGPathElement>();
   let drag: Drag | null = null;
   /** The last committed edit, until a build of the current params replaces the card. */
@@ -254,12 +259,23 @@ export function decorEditor(ctx: Ctx): DecorEditor {
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
-      const params = ctx.params();
-      pending = null;
-      ctx.update({ ...params, decor: removeItem(params.decor, id) });
-      redrawGhost();
+      remove(id);
     }
   };
+
+  /** Removes the item and clears the selection; focus goes to the sheet, since the item is going. */
+  function remove(id: string) {
+    const params = ctx.params();
+    pending = null;
+    if (document.activeElement !== svg) svg?.focus();
+    ctx.update({ ...params, decor: removeItem(params.decor, id) });
+    ctx.select(null);
+    redrawGhost();
+  }
+  removeBtn.addEventListener('click', () => {
+    const id = ctx.selection();
+    if (id) remove(id);
+  });
 
   const onFocus = (e: FocusEvent) => {
     const id = (e.target as Element).getAttribute?.('data-item');
@@ -275,6 +291,7 @@ export function decorEditor(ctx: Ctx): DecorEditor {
     if (!pose || !selected) {
       outline?.remove();
       handle?.remove();
+      removeBtn.remove();
       outline = handle = null;
       return;
     }
@@ -295,6 +312,14 @@ export function decorEditor(ctx: Ctx): DecorEditor {
     handle.setAttribute('cx', String(pose.centre.x + h / 2 + W));
     handle.setAttribute('cy', String(L - (pose.centre.y - w / 2)));
     layer.appendChild(handle);
+    // The × sits on the box's top-right corner as drawn, over the sheet's wrapper (same box as the SVG).
+    const icon = iconById(pose.icon);
+    removeBtn.setAttribute('aria-label', DECORATIONS.remove(icon.name));
+    removeBtn.setAttribute('data-ph-capture-attribute-item', pose.id);
+    removeBtn.setAttribute('data-ph-capture-attribute-icon', icon.id);
+    removeBtn.style.left = `${((pose.centre.x + h / 2 + W) / (2 * W)) * 100}%`;
+    removeBtn.style.top = `${((L - (pose.centre.y + w / 2)) / L) * 100}%`;
+    if (removeBtn.parentElement !== svg.parentElement) svg.parentElement?.appendChild(removeBtn);
   };
 
   return {

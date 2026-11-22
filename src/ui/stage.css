@@ -129,6 +129,24 @@
 .flat-view .decor-ghost { stroke-width: 2px; pointer-events: none; }
 .flat-view .decor-ghost[data-state='ok'] { fill: color-mix(in srgb, var(--sheet-ink) 18%, transparent); stroke: var(--sheet-ink); }
 .flat-view .decor-ghost[data-state='blocked'] { fill: rgb(176 39 31 / 0.22); stroke: #d9342b; }
+.sheet-art { position: relative; }
+.decor-remove {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1;
+  transform: translate(-30%, -70%);
+}
+.decor-remove:hover { border-color: var(--ink); }
 .flat-view .decor-handle { fill: var(--sheet-ink); stroke: var(--sheet-paper); stroke-width: 2px; cursor: nwse-resize; touch-action: none; }
 /* Small screens resize with the rail's size slider. */
 @media (max-width: 767.98px) {

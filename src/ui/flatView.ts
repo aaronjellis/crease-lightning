@@ -74,7 +74,8 @@ export function flatView(ctx: Ctx): { el: HTMLElement; render(card: Card): void;
         svg.removeAttribute('width');
         svg.removeAttribute('height');
         const hint = sheet === 'inner' && card.decor.items.length ? h('span', { class: 'sheet-hint', id: FLAT_HINT_ID, text: FLAT.editHint }) : null;
-        const fig = h('figure', { class: 'sheet', 'data-sheet': sheet }, svg, h('figcaption', {}, h('span', { text: FLAT.label(label, piece.widthMm, piece.heightMm) }), hint));
+        // The wrapper has the SVG's box, so the editor can place HTML controls over it in percentages.
+        const fig = h('figure', { class: 'sheet', 'data-sheet': sheet }, h('div', { class: 'sheet-art' }, svg), h('figcaption', {}, h('span', { text: FLAT.label(label, piece.widthMm, piece.heightMm) }), hint));
         fig.style.setProperty('--sheet-ink', inkOn(paper));
         fig.style.setProperty('--sheet-paper', paper);
         return { fig, svg };

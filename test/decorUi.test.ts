@@ -456,6 +456,25 @@ describe('Flat view editing', () => {
     expect(app.getParams().decor.items.find((i) => i.id === id)!.sizeMm).toBe(want);
   });
 
+  test("the sheet's delete button removes the selected item and clears the selection", async () => {
+    const id = await pinFree();
+    const it = app.getParams().decor.items.find((i) => i.id === id)!;
+    const x = $('.sheet[data-sheet="inner"] .decor-remove');
+    expect(x.getAttribute('aria-label')).toBe(`Remove ${iconById(it.icon).name}`);
+    expect(x.getAttribute('data-ph-capture-attribute-item')).toBe(id);
+    click(x);
+    expect(app.getParams().decor.items.some((i) => i.id === id)).toBe(false);
+    expect($('input[name="decor-size"]').closest('[hidden]')).not.toBeNull();
+    expect(root.querySelector('.decor-remove')).toBeNull();
+    await app.whenIdle();
+    expect(innerSvg().querySelector('.decor-hit[aria-pressed="true"]')).toBeNull();
+    expect(document.activeElement).toBe(innerSvg());
+  });
+
+  test('no delete button without a selection', () => {
+    expect(root.querySelector('.decor-remove')).toBeNull();
+  });
+
   test('a selection made in the rail shows on the sheet', () => {
     const item = app.getParams().decor.items[1];
     click($(`.decor-chip[data-ph-capture-attribute-item="${item.id}"] .decor-chip-select`));
