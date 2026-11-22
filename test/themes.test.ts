@@ -1,24 +1,28 @@
 import { describe, expect, test } from 'vitest';
-import { area, bounds, intersect, offset, outerCount, scale, union, type Poly } from '@kerfuffle/engine/geom';
+import { area, bounds, intersect, offset, outerCount, scale, union, type Poly, type Pt } from '@kerfuffle/engine/geom';
 import { BIRTHDAY_DEFAULTS, type ThemeDefaults } from '../src/core/model';
 import { MIN_STROKE_BLADE_MM, PLINTH_MIN_MM } from '../src/core/constants';
 import { buildIconBlock, thinArea } from '../src/core/text';
 import { ICONS, THEMES, iconById, loadIcon, themeById } from '../src/themes';
 
 const accentIds = new Set(THEMES.flatMap((t) => t.accents));
+/** How many holes are narrower than 1 mm: those that vanish under a 0.5 mm inward offset. */
+const narrowHoles = (p: Poly): number =>
+  p.filter((c) => !outerCount([c])).filter((h) => area(offset([[...h].reverse()], -0.5, 0.05)) <= 1e-6).length;
 const atMin = (id: string): Poly => {
   const i = iconById(id);
   return scale(i.poly, i.minHeightMm);
 };
 
 describe('icons', () => {
-  test.each(ICONS.map((i) => i.id))('%s is one piece at any size, 1 mm tall, bottom on y = 0', (id) => {
+  test.each(ICONS.map((i) => i.id))('%s is one piece at its minimum height and at 30 mm, 1 mm tall, bottom on y = 0', (id) => {
     const i = iconById(id);
     const b = bounds(i.poly)!;
     expect(b.h).toBeCloseTo(1, 3);
     expect(b.y).toBeCloseTo(0, 3);
     expect(b.x).toBeCloseTo(0, 3);
     expect(outerCount(atMin(id))).toBe(1);
+    expect(outerCount(scale(i.poly, 30))).toBe(1);
     expect(i.source).not.toBe('');
     expect(i.licence).not.toBe('');
   });
@@ -28,8 +32,14 @@ describe('icons', () => {
   });
 
   test.each(ICONS.map((i) => i.id))('%s has no hole narrower than 1 mm at its minimum height', (id) => {
-    const holes = atMin(id).filter((c) => !outerCount([c]));
-    for (const h of holes) expect(area(offset([[...h].reverse()], -0.5, 0.05))).toBeGreaterThan(1e-6);
+    expect(narrowHoles(atMin(id))).toBe(0);
+  });
+
+  test('the hole check counts a 0.6 mm slot but not a 3 mm hole', () => {
+    const box = (x: number, y: number, w: number, h: number): Pt[] => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
+    const withHole = (hole: Pt[]): Poly => [box(0, 0, 20, 20), [...hole].reverse()];
+    expect(narrowHoles(withHole(box(5, 5, 0.6, 10)))).toBe(1);
+    expect(narrowHoles(withHole(box(5, 5, 3, 3)))).toBe(0);
   });
 
   test.each(ICONS.map((i) => i.id))('%s welds to a plinth into one piece', (id) => {
