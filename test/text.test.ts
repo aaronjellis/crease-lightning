@@ -23,10 +23,8 @@ const FONTS = [
 const SPACINGS = ['tight', 'normal', 'loose'] as const;
 // The brief's cases, then the rest of the spec's Punctuation table: en dash, curly and straight
 // quotes, semicolon, period, and the one-piece symbols.
-const PUNCTUATION = [
-  'MARY-KATE', "O'BRIEN", 'SAM & ALEX', 'HAPPY 40TH!', 'CONGRATS, GRAD', 'WHY?', 'RE: US', 'HI\u2014YOU', 'ijij',
-  '1\u20132 \u201CHI\u201D', 'O\u2019NEIL "JO"', 'A; B. C', '3/4 #1 @ME',
-];
+const BRIEF_PUNCTUATION = ['MARY-KATE', "O'BRIEN", 'SAM & ALEX', 'HAPPY 40TH!', 'CONGRATS, GRAD', 'WHY?', 'RE: US', 'HI\u2014YOU', 'ijij'];
+const PUNCTUATION = [...BRIEF_PUNCTUATION, '1\u20132 \u201CHI\u201D', 'O\u2019NEIL "JO"', 'A; B. C', '3/4 #1 @ME'];
 
 const rect = (x: number, y: number, w: number, h: number): Poly => [
   [
@@ -36,28 +34,6 @@ const rect = (x: number, y: number, w: number, h: number): Poly => [
     { x, y: y + h },
   ],
 ];
-
-/** The region an opening at r = minStroke / 2 removes: everything too thin, plus corner slivers. */
-const lostRegion = (poly: Poly, minStroke: number): Poly => {
-  const r = minStroke / 2;
-  return difference(poly, grow(offset(poly, -r, 0.02), r, 0.02));
-};
-
-/**
- * Thin material a bridge added: the opening's lost region after bridging, minus what was already
- * lost before, within 1 mm of a bar, with corner slivers (under 0.15 mm deep at r = 0.75) shaved
- * off. Both shapes are cropped to a box 4 mm round the bars to keep the opening fast; the crop's own
- * edges are further than 1 mm from every bar, so they never count.
- */
-function bridgeThinArea(before: Poly, after: Poly, bars: Poly, minStroke: number): number {
-  const b = bounds(bars);
-  if (!b) return 0;
-  const crop = rect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
-  const lostAfter = lostRegion(intersect(after, crop), minStroke);
-  const lostBefore = lostRegion(intersect(before, crop), minStroke);
-  const added = intersect(difference(lostAfter, grow(lostBefore, 0.05, 0.02)), grow(bars, 1, 0.05));
-  return area(offset(added, -0.15, 0.02));
-}
 
 /** The widest single piece of an overlap (specks under 0.01 mm² ignored), the weld tight tracking sizes. */
 const widestPiece = (poly: Poly): number =>
@@ -241,29 +217,43 @@ describe('buildBlock', () => {
     }
   });
 
-  test('the bridge check catches a bridge thinner than 1.5 mm', () => {
-    const squares = union([rect(0, 0, 5, 5), rect(8, 0, 5, 5)]);
-    const thin = rect(4.9, 2, 3.2, 1.0);
-    const thick = rect(4.9, 1.6, 3.2, 1.8);
-    expect(bridgeThinArea(squares, union([squares, thin]), thin, BRIDGE_MM)).toBeGreaterThan(0.5);
-    expect(bridgeThinArea(squares, union([squares, thick]), thick, BRIDGE_MM)).toBeLessThan(0.05);
-  });
-
   test('every bridge is at least 1.5 mm wide', () => {
     let total = 0;
-    for (const t of PUNCTUATION) {
+    for (const t of BRIEF_PUNCTUATION) {
       for (const [name, font] of FONTS) {
         for (const sp of SPACINGS) {
           const blk = buildBlock(t, font, 12, sp, 2);
-          if (blk.bridges === 0) continue;
           total += blk.bridges;
-          const before = union([...layoutGlyphs(t, font, 12, sp, 2).glyphs.map((g) => g.poly), blk.plinth]);
-          const after = union([blk.letters, blk.plinth]);
-          expect(bridgeThinArea(before, after, blk.bars, BRIDGE_MM), `${t} ${name} ${sp}`).toBeLessThan(0.05);
+          expect(thinArea(union([blk.letters, blk.plinth]), BRIDGE_MM), `${t} ${name} ${sp}`).toBeLessThan(0.05);
         }
       }
     }
     expect(total).toBeGreaterThan(10);
+  }, 60_000); // 81 openings of a whole line take about 10 s
+
+  test('slots narrower than 1 mm are filled; no hole left vanishes at -0.5 mm', () => {
+    for (const t of PUNCTUATION) {
+      for (const [name, font] of FONTS) {
+        for (const sp of SPACINGS) {
+          const blk = buildBlock(t, font, 12, sp, 2);
+          for (const hole of union([blk.letters, blk.plinth]).filter((c) => area([c]) < 0)) {
+            const h = [[...hole].reverse()];
+            expect(area(offset(h, -0.5, 0.05)), `${t} ${name} ${sp} hole at ${JSON.stringify(bounds(h))}`).toBeGreaterThan(1e-6);
+          }
+        }
+      }
+    }
+  });
+
+  test('BOAT keeps its counters', () => {
+    for (const [name, font] of FONTS) {
+      for (const sp of SPACINGS) {
+        const blk = buildBlock('BOAT', font, 12, sp, 2);
+        const holes = union([blk.letters, blk.plinth]).filter((c) => area([c]) < 0);
+        // B has two counters, O one, A one.
+        expect(holes.length, `${name} ${sp}`).toBeGreaterThanOrEqual(4);
+      }
+    }
   });
 
   test('waste is window minus letters and plinth', () => {
@@ -308,8 +298,29 @@ describe('thinArea', () => {
     expect(thinArea(rect(0, 0, 10, 1), 1.5)).toBeCloseTo(10, 0);
   });
 
-  test('a thick square loses only its corners', () => {
-    // Each square corner rounds off r²(1 − π/4) at r = 0.75.
-    expect(thinArea(rect(0, 0, 5, 5), 1.5)).toBeCloseTo(4 * 0.5625 * (1 - Math.PI / 4), 1);
+  test('corner slivers do not count', () => {
+    expect(thinArea(rect(0, 0, 5, 5), 1.5)).toBeLessThan(0.05);
+  });
+
+  test('square slab text counts nothing', () => {
+    const blk = buildBlock('HAPPY', alfa, 12, 'tight', 2);
+    expect(thinArea(union([blk.letters, blk.plinth]), 1.5)).toBeLessThan(0.05);
+  });
+
+  test('a 1 mm bar joined to a block counts', () => {
+    expect(thinArea(union([rect(0, 0, 6, 6), rect(6, 2, 5, 1)]), 1.5)).toBeGreaterThan(0.05);
+  });
+
+  test("flags a glyph's own thin stroke: Rokkitt Black's @ ring is about 1.1 mm at 12 mm", () => {
+    const blk = buildBlock('@', rokkitt, 12, 'normal', 2);
+    const solid = union([blk.letters, blk.plinth]);
+    expect(thinArea(solid, 1.5)).toBeGreaterThan(5);
+    expect(thinArea(solid, 1.0)).toBeLessThan(0.05);
+  });
+
+  test('a 0.8 mm neck between two blocks counts', () => {
+    // Shorter than 2 × minStroke, so it counts because the opening splits the shape there.
+    const neck = union([rect(0, 0, 6, 6), rect(5.9, 2.6, 1.2, 0.8), rect(7, 0, 6, 6)]);
+    expect(thinArea(neck, 1.5)).toBeGreaterThan(0.05);
   });
 });

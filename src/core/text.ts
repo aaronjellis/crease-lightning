@@ -12,7 +12,7 @@ import {
   type TextConfig,
   type TextFont,
 } from '@kerfuffle/engine/textOutline';
-import { area, bounds, difference, fromPaths64, grow, intersect, offset, union, type Poly, type Pt } from '@kerfuffle/engine/geom';
+import { area, bounds, difference, fromPaths64, grow, intersect, offset, outerCount, union, type Poly, type Pt } from '@kerfuffle/engine/geom';
 import { BRIDGE_MM, CLEARANCE_MM, EXPORT_TOL_MM, PLINTH_MIN_MM, PREVIEW_TOL_MM, TRACK_OVERLAP_MM } from './constants';
 import type { Spacing } from './model';
 
@@ -271,7 +271,9 @@ function assemble(raw: Poly, inkW: number, plinthH: number, top: number, capMm: 
   const plinth = rectPoly(c, 0, inkW, plinthH);
   // Comma tails and anything else below P are clipped at the plinth's bottom.
   const clipped = intersect(raw, rectPoly(-1, 0, inkW + 2 * c + 2, s + c + 1));
-  const { letters, bars, count } = bridge(clipped, plinth, capMm);
+  const bridged = bridge(clipped, plinth, capMm);
+  const { bars, count } = bridged;
+  const letters = fillSlots(bridged.letters, plinth);
   const waste = difference(window, union([letters, plinth]));
   return { letters, plinth, window, waste, inkW, s, capMm, bridges: count, bars };
 }
@@ -313,10 +315,56 @@ export function buildIconBlock(icon: Poly, heightMm: number, clearanceMm: number
   return assemble(union([placed]), b.w * heightMm, PLINTH_MIN_MM, b.h * heightMm, heightMm, clearanceMm);
 }
 
-/** The area lost to an opening at r = minStroke / 2: strokes too thin to cut, and corner rounding. */
+/** Extra regrowth in the opening, so rounding never leaves strips along strokes just over the minimum. */
+const REGROW_SLACK_MM = 0.05;
+/** A removed piece thinner than this on average (area / longest side) is chord error or corner slivers. */
+const THIN_FLOOR_MM = 0.2;
+
+/** Holes narrower than this are slots between welded letters, too narrow to cut; real counters are wider. */
+const SLOT_MM = 1;
+
+/**
+ * Fills every hole in letters ∪ plinth narrower than 1 mm (one that vanishes under a −0.5 mm
+ * offset): the slots tight tracking leaves between stems where serifs overlap.
+ */
+function fillSlots(letters: Poly, plinth: Poly): Poly {
+  const slots = union([letters, plinth])
+    .filter((c) => signedArea(c) < 0)
+    .map((h) => [[...h].reverse()])
+    .filter((h) => area(offset(h, -SLOT_MM / 2, PREVIEW_TOL_MM)) <= 1e-6);
+  return slots.length ? union([letters, ...slots]) : letters;
+}
+
+/**
+ * The area of material too thin to cut at `minStrokeMm`. An opening at r = minStroke / 2 removes
+ * thin strokes but also rounds every convex corner (r²(1 − π/4) each), so only real thin material
+ * counts: a removed piece longer than 2 × minStroke, or one that joined pieces the opening split
+ * apart (a thin neck). Corner slivers are short and join nothing.
+ */
 export function thinArea(poly: Poly, minStrokeMm: number): number {
   const r = minStrokeMm / 2;
-  return area(poly) - area(grow(offset(poly, -r, EXPORT_TOL_MM), r, EXPORT_TOL_MM));
+  // Regrowing a hairline core (a stroke just over minStroke) can drop strips in clipper2-js, so
+  // regrow a little further and clip to the shape. Which strokes vanish still depends only on r.
+  const opened = intersect(poly, grow(offset(poly, -r, PREVIEW_TOL_MM), r + REGROW_SLACK_MM, PREVIEW_TOL_MM));
+  const necks = outerCount(opened) > outerCount(poly);
+  const openedPieces = necks ? components(opened) : [];
+  // A neck touches two or more of the opened pieces.
+  const joins = (piece: Poly): boolean => {
+    const near = grow(piece, 0.05, PREVIEW_TOL_MM);
+    return openedPieces.filter((o) => area(intersect(near, o)) > 1e-4).length >= 2;
+  };
+  // Chord error leaves slivers a few µm thick along slanted and curved edges, Clipper can return a
+  // junk outer-and-hole pair on such slivers, and a hairline can chain corner slivers into one long
+  // piece. All of those are under 0.1 mm thick on average; real thin material is a stroke's width.
+  let total = 0;
+  for (const piece of components(difference(poly, opened))) {
+    const b = bounds(piece)!;
+    const long = Math.max(b.w, b.h);
+    const a = area(piece);
+    if (a / long < THIN_FLOOR_MM) continue;
+    if (long > 2 * minStrokeMm || (necks && joins(piece))) total += a;
+  }
+  return total;
 }
 
 // ---------------------------------------------------------------- bridges
