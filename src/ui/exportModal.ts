@@ -6,7 +6,7 @@
 import type { Card } from '../core/build';
 import { slugName } from '../export/slug';
 import { stepsFor, TARGETS, type Target, type TargetFile, type TargetId } from '../export/targets';
-import { track } from './context';
+import { milestone, track } from './context';
 import { h } from './dom';
 import { blockingReasons, exportWarnings } from './exportState';
 import { EXPORT } from './strings';
@@ -155,6 +155,7 @@ export function exportModal(deps: ExportDeps): { el: HTMLDialogElement; open(): 
         lines: card.layout.lines.length,
         warnings: card.notes.filter((n) => n.level !== 'info').length,
       });
+      milestone('export');
     } catch (e) {
       console.error(e);
       status.textContent = EXPORT.failed;

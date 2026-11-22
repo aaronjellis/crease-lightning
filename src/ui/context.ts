@@ -55,4 +55,11 @@ export function track(event: string, props: Record<string, string | number | boo
   ph?.capture(event, { project: 'crease-lightning', ...props });
 }
 
+/** Tells the labs feedback widget about a milestone, so it can suggest a related experiment. Off on Atomm. */
+export function milestone(name: 'export'): void {
+  if (analyticsOff) return;
+  const fb = (globalThis as { labsFeedback?: { milestone?(m: string): void } }).labsFeedback;
+  fb?.milestone?.(name);
+}
+
 export { FontLoader } from '../core/fontLoader';
