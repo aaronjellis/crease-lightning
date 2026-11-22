@@ -73,6 +73,61 @@ describe('one-piece', () => {
   });
 });
 
+describe('one-piece: open cuts and stray contours', () => {
+  test('one open cut across the sheet splits it in two', () => {
+    const cut = [{ x: W, y: -1 }, { x: W, y: L + 1 }];
+    const split: Base = { ...base, inner: { ...base.inner, openCuts: [...base.inner.openCuts, cut] } };
+    const r = result(run(split), 'one-piece');
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('pieces');
+  });
+
+  test('one stray contour fails even when the rest of the line touches the riser', () => {
+    let done = false;
+    const panels = base.panels.map((p) => {
+      if (done || !p.id.endsWith(':letters') || !p.poly.length) return p;
+      done = true;
+      return { ...p, poly: [...p.poly, ...square(-W + 1, 1)] };
+    });
+    const r = result(run({ ...base, panels }), 'one-piece');
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('letters');
+  });
+});
+
+describe('layout: open cuts and edges', () => {
+  const cutsAt = (gap: number): Base => {
+    const a = [{ x: 2 * W - 40, y: 80 }, { x: 2 * W - 30, y: 80 }];
+    const b = [{ x: 2 * W - 40, y: 80 + gap }, { x: 2 * W - 30, y: 80 + gap }];
+    return { ...base, inner: { ...base.inner, openCuts: [...base.inner.openCuts, a, b] } };
+  };
+
+  test('two open cuts 1 mm apart fail', () => {
+    expect(result(run(cutsAt(1)), 'layout').ok).toBe(false);
+  });
+  test('boundary: 2.8 mm fails, 3.2 mm passes', () => {
+    expect(result(run(cutsAt(2.8)), 'layout').ok).toBe(false);
+    expect(result(run(cutsAt(3.2)), 'layout').ok).toBe(true);
+  });
+
+  const root = base.layout.steps.find((s) => s.parentId === null)!;
+  const edit = (patch: Partial<typeof root>): Base => ({
+    ...base,
+    layout: { ...base.layout, steps: base.layout.steps.map((s) => (s.id === root.id ? { ...s, ...patch } : s)) },
+  });
+
+  test('a strip whose back hinge is within 6 mm of the sheet edge fails', () => {
+    const r = result(run(edit({ h: W - 3 })), 'layout');
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('card edge');
+  });
+  test('a strip whose base hinge is within 6 mm of the sheet edge fails', () => {
+    const r = result(run(edit({ d: W - 3 })), 'layout');
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('card edge');
+  });
+});
+
 describe('layout', () => {
   test('two cuts 1 mm apart fail', () => {
     const a = [[{ x: 2 * W - 40, y: 80 }, { x: 2 * W - 30, y: 80 }, { x: 2 * W - 30, y: 85 }, { x: 2 * W - 40, y: 85 }]];

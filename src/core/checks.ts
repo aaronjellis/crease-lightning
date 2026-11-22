@@ -62,8 +62,12 @@ function onePiece(card: Subject): Check {
   if (pieces !== 1) return { ok: false, detail: `The inner sheet falls into ${pieces} pieces when cut.` };
   for (const letters of card.panels.filter((x) => x.id.endsWith(':letters') && x.poly.length > 0)) {
     const riser = card.panels.find((x) => x.id === letters.id.replace(/:letters$/, ':riser'));
-    // Growing the riser (a plain rectangle) is safe; growing the letters leaves slivers in their counters.
-    if (!riser || area(intersect(grow(riser.poly, 0.01, PREVIEW_TOL_MM), letters.poly)) < TOUCH_MM2) {
+    // Each outer contour must touch the riser on its own: a stray dot or umlaut fails even when the
+    // rest of the line is attached. Growing the riser (a plain rectangle) is safe; growing the letters
+    // leaves slivers in their counters.
+    const touch = riser ? grow(riser.poly, 0.01, PREVIEW_TOL_MM) : [];
+    const stray = letters.poly.some((c) => area([c]) > 0 && area(intersect(touch, [c])) < TOUCH_MM2);
+    if (!riser || stray) {
       return { ok: false, detail: `The letters in ${letters.id} aren't attached to their riser.` };
     }
   }
