@@ -1,0 +1,3 @@
+[submodule "kerfuffle"]
+	path = kerfuffle
+	url = https://github.com/aaronjellis/kerfuffle.git

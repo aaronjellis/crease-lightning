@@ -1,0 +1,96 @@
+/**
+ * The single pure entry point: params → fitted layout → flattened pieces and panels → checks.
+ * Every exporter, the 3D view and the UI call `build`.
+ */
+import { pathLength } from '@kerfuffle/engine/geom';
+import { runChecks, type CheckResult } from './checks';
+import { MAT_USABLE_MM } from './constants';
+import { fitLayout, type Fix, type Layout, type Note } from './fit';
+import { flatten, type Panel, type Piece } from './flatten';
+import type { FontSet } from './fonts';
+import { tidy } from './lines';
+import type { Params } from './model';
+import { normaliseText } from './text';
+import { themeById } from '../themes';
+
+export interface Card {
+  params: Params;
+  layout: Layout;
+  inner: Piece;
+  jacket: Piece;
+  panels: Panel[];
+  checks: CheckResult[];
+  fixes: Fix[];
+  notes: Note[];
+  /** Line 1 is typed and every check but `stroke` passes; a thin stroke is a strong warning only (R23). */
+  exportable: boolean;
+  stats: { cutMm: number; scoreMm: number };
+}
+
+export interface BuildOptions {
+  /** Run fit's stroke check (slow). Default true; the UI turns it off per keystroke. */
+  strokeCheck?: boolean;
+}
+
+export const EMPTY_MESSAGE_NOTE = 'Type a message to make your card.';
+export const MAT_NOTE = 'This card needs a 12 × 24 in mat.';
+
+/** Whether the inner sheet or the jacket, open, is wider or taller than a 12 × 12 in mat can cut (M9). */
+export const needsBigMat = (card: Pick<Card, 'inner' | 'jacket'>): boolean =>
+  Math.max(card.inner.widthMm, card.inner.heightMm, card.jacket.widthMm, card.jacket.heightMm) > MAT_USABLE_MM;
+
+const cutLength = (piece: Piece): number =>
+  piece.outline.reduce((t, c) => t + pathLength(c, true), 0) +
+  piece.holes.reduce((t, h) => t + h.reduce((s, c) => s + pathLength(c, true), 0), 0) +
+  piece.openCuts.reduce((t, c) => t + pathLength(c, false), 0);
+
+const scoreLength = (piece: Piece): number => piece.folds.reduce((t, f) => t + pathLength(f.path, false), 0);
+
+/** Whether a line has anything the card's font or the fallback can draw, once `|` breaks are spaces. */
+export function hasDrawableText(line: string, p: Params, fonts: FontSet): boolean {
+  if (line.trim() === '') return false;
+  const font = fonts.get(p.font) ?? fonts.fallback;
+  return tidy(normaliseText(line.replace(/\|/g, ' '), p.allCaps, font, fonts.fallback).text) !== '';
+}
+
+export function build(
+  p: Params,
+  assets: { fonts: FontSet },
+  target: 'blade' | 'laser' = 'blade',
+  opts: BuildOptions = {}
+): Card {
+  const theme = themeById(p.theme);
+  const strokeCheck = opts.strokeCheck ?? true;
+  // A line 1 with nothing to draw (spaces, `|`, only emoji, a script no font has) previews the
+  // theme's own text; export stays off until the user types something that cuts (M2).
+  const blankMessage = !hasDrawableText(p.line1, p, assets.fonts);
+  const shown: Params = blankMessage ? { ...p, line1: theme.lines[0], line2: theme.lines[1] } : p;
+
+  const layout = fitLayout(shown, assets.fonts, theme, target, { strokeCheck });
+  const { inner, jacket, panels } = flatten(layout, shown, theme);
+
+  const notes: Note[] = [...layout.notes];
+  if (blankMessage) notes.unshift({ level: 'warn', message: EMPTY_MESSAGE_NOTE });
+  if (target === 'blade' && needsBigMat({ inner, jacket })) {
+    notes.push({ level: 'info', message: MAT_NOTE });
+  }
+
+  const partial = {
+    params: p,
+    layout,
+    inner,
+    jacket,
+    panels,
+    fixes: layout.fixes,
+    notes,
+    stats: {
+      cutMm: cutLength(inner) + cutLength(jacket),
+      scoreMm: scoreLength(inner) + scoreLength(jacket),
+    },
+    exportable: false,
+  };
+  const checks = runChecks(partial, shown, { strokeCheck });
+  // Thin strokes are a strong warning, not a refusal (spec, Text fit: "export still works"; R23).
+  const exportable = !blankMessage && layout.steps.length > 0 && checks.every((c) => c.ok || c.id === 'stroke');
+  return { ...partial, checks, exportable };
+}
