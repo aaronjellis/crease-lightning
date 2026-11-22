@@ -48,7 +48,8 @@ export const atLeastMin = (iconId: string, sizeMm: number): number => Math.max(s
 
 /**
  * The icon `sizeMm` tall (along u), upright, with its box centred on `centre`. Every caller passes a
- * size of at least the icon's minimum: offsetting an icon scaled below it can stall clipper2-js (R12).
+ * size of at least the icon's minimum (R12). Nothing offsets the result: clipper2-js can stall on an
+ * icon at sizes above its minimum too, so fit and checks measure distances (`clearance.ts`).
  */
 export function iconPoly(iconId: string, _page: Page, centre: Pt, sizeMm: number): Poly {
   const ib = unitBox(iconId);

@@ -8,7 +8,8 @@
  * page. A pinned item that no longer fits takes, for this build only, the fitting candidate of its
  * own scatter list nearest its pin, marked `displaced`; its pin stays in the params.
  */
-import { area, bounds, grow, intersect, type Poly, type Pt, type Rect } from '@kerfuffle/engine/geom';
+import type { Poly, Pt, Rect } from '@kerfuffle/engine/geom';
+import { clear, shapeOf, type Shape } from '../clearance';
 import { MARGIN_MM, PREVIEW_TOL_MM, WEB_MM } from '../constants';
 import { borderSpots } from './border';
 import { atLeastMin, fromPin, iconExtent, iconPoly, type Spot } from './geometry';
@@ -34,38 +35,21 @@ export interface DecorLayout {
 }
 
 const EPS = 1e-6;
-/** How far an obstacle keeps others out: a web plus the chord tolerance of its grown arcs. */
+/**
+ * How far every cut keeps others away: a web plus the chord tolerance the grown-zone test this
+ * replaced allowed for, so placements keep the margin they had.
+ */
 const CLEAR_MM = WEB_MM + PREVIEW_TOL_MM;
 
-const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-
-interface Obstacle {
-  /** The poly's box grown by CLEAR_MM: a candidate box outside it is clear. */
-  box: Rect | null;
-  /** The zone it keeps others out of, grown on the first box hit. */
-  zone?: Poly;
-}
+/** Whether two boxes come within CLEAR_MM of each other: if not, their shapes are clear. */
+const nearBox = (a: Rect, b: Rect) =>
+  a.x - CLEAR_MM < b.x + b.w && b.x - CLEAR_MM < a.x + a.w && a.y - CLEAR_MM < b.y + b.h && b.y - CLEAR_MM < a.y + a.h;
 
 /**
- * Obstacles by poly, so the zones grown while placing are reused by every later `canPlace` on the
- * same layout (the drag check). A layout copied from the build worker grows each zone lazily, once.
- */
-const obstacles = new WeakMap<Poly, Obstacle>();
-
-function obstacleOf(poly: Poly): Obstacle {
-  let o = obstacles.get(poly);
-  if (!o) {
-    const b = bounds(poly);
-    o = { box: b && { x: b.x - CLEAR_MM, y: b.y - CLEAR_MM, w: b.w + 2 * CLEAR_MM, h: b.h + 2 * CLEAR_MM } };
-    obstacles.set(poly, o);
-  }
-  return o;
-}
-
-/**
- * Whether `cand` fits on the layout: inside the margin on its own page, and a web clear of the
+ * Whether `cand` fits on the layout: inside the margin on its own page, and `CLEAR_MM` clear of the
  * keep-out, every border tile and every other item (an item with `cand.id` is ignored, so an item
- * can be tested against the rest). Boxes first; polygon tests only on box hits.
+ * can be tested against the rest). Boxes first; the exact distance test (`clear`) only on box hits.
+ * No polygon offsets: clipper2's offset can stall for minutes on some icon sizes.
  */
 export function canPlace(layout: DecorLayout, cand: Spot, W: number, L: number): boolean {
   const size = atLeastMin(cand.icon, cand.sizeMm);
@@ -76,13 +60,12 @@ export function canPlace(layout: DecorLayout, cand: Spot, W: number, L: number):
   if (box.x < lo - EPS || box.x + box.w > hi + EPS) return false;
   if (box.y < MARGIN_MM - EPS || box.y + box.h > L - MARGIN_MM + EPS) return false;
 
-  let poly: Poly | null = null;
+  let shape: Shape | null = null;
   const hits = (other: Poly): boolean => {
-    const o = obstacleOf(other);
-    if (!o.box || !overlaps(o.box, box)) return false;
-    o.zone ??= grow(other, CLEAR_MM, PREVIEW_TOL_MM);
-    poly ??= iconPoly(cand.icon, cand.page, cand.centre, size);
-    return area(intersect(o.zone, poly)) > EPS;
+    const o = shapeOf(other);
+    if (!o.box || !nearBox(o.box, box)) return false;
+    shape ??= shapeOf(iconPoly(cand.icon, cand.page, cand.centre, size));
+    return !clear(shape, o, CLEAR_MM);
   };
   if (hits(layout.keepOut)) return false;
   for (const tile of layout.border) if (hits(tile)) return false;

@@ -14,7 +14,7 @@ import { candidates } from '../src/core/decor/scatter';
 import type { Decor } from '../src/core/decor/types';
 import { foldU } from '../src/core/linkage';
 import { cardDims, defaultParams, withSize, type Params } from '../src/core/model';
-import { themeById } from '../src/themes';
+import { THEMES, themeById } from '../src/themes';
 import { testFonts } from './helpers/fonts';
 
 const assets = { fonts: testFonts() };
@@ -329,5 +329,65 @@ describe('decor in build', () => {
     }
     times.sort((a, b) => a - b);
     expect(times[25]).toBeLessThan(4);
+  });
+});
+
+/**
+ * Critical 1 (final review): clipper2's offset ran for minutes on the default card's confetti `i5`
+ * (12.217 mm at (86.08, 15.67)), and the fit test grew every obstacle a candidate's box met. A drag
+ * to about (86.75, 13.68) froze the tab. The fit test now measures distances instead; these must
+ * return, and quickly. A hang here blocks the worker, which vitest reports after its RPC timeout.
+ */
+describe('the fit test never stalls', () => {
+  const SPOT = { x: 86.75, y: 13.68 };
+
+  test('canPlace beside the default card’s confetti i5 answers in under 500 ms', () => {
+    const p = P0;
+    const { W, L } = cardDims(p);
+    const layout = make(p).decor;
+    const i5 = layout.items.find((i) => i.id === 'i5')!;
+    expect(i5.icon).toBe('confetti');
+    expect(i5.sizeMm).toBeCloseTo(12.217, 3);
+    for (const it of layout.items.filter((i) => i.id !== 'i5')) {
+      const t0 = performance.now();
+      const ok = canPlace(layout, { ...it, page: 'base', centre: SPOT }, W, L);
+      expect(performance.now() - t0, it.id).toBeLessThan(500);
+      // Its box meets i5's, which is in the way.
+      expect(ok, it.id).toBe(false);
+    }
+  });
+
+  test('building the default card with an item pinned at that spot completes', () => {
+    const { W, L } = cardDims(P0);
+    const d = moveItem(P0.decor, 'i7', toPin('base', SPOT, W, L), 11.45);
+    const t0 = performance.now();
+    const card = make(withDecor(P0, d));
+    expect(performance.now() - t0).toBeLessThan(5000);
+    expect(card.decor.items.length + card.decor.missing.length).toBe(P0.decor.items.length);
+    expect(card.checks.find((c) => c.id === 'layout')!.ok).toBe(true);
+  });
+
+  describe('a drag sweep round every placed item on 5 × 7', () => {
+    const OFFSETS = [-12, -9, -6, -3, 0, 3, 6, 9, 12];
+    test.each(THEMES.filter((t) => t.styles.length).map((t) => [t.id, t] as const))('%s, first style', (_id, theme) => {
+      const p: Params = { ...P0, theme: theme.id, decor: decorFromStyle(theme, theme.styles[0].id, 1) };
+      const { W, L } = cardDims(p);
+      const layout = make(p).decor;
+      const t0 = performance.now();
+      let calls = 0;
+      for (const dragged of layout.items) {
+        for (const around of layout.items) {
+          for (const dx of OFFSETS) {
+            for (const dy of OFFSETS) {
+              const centre = { x: around.centre.x + dx, y: around.centre.y + dy };
+              canPlace(layout, { ...dragged, page: centre.x < 0 ? 'back' : 'base', centre }, W, L);
+              calls++;
+            }
+          }
+        }
+      }
+      expect(calls).toBeGreaterThan(0);
+      expect(performance.now() - t0).toBeLessThan(5000);
+    });
   });
 });
