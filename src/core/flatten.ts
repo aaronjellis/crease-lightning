@@ -101,7 +101,7 @@ interface FlatFold {
   span: Span;
 }
 
-export function flatten(layout: Layout, p: Params, theme: Theme): Flat {
+export function flatten(layout: Layout, p: Params, _theme: Theme): Flat {
   const { W, L } = cardDims(p);
   const steps = layout.steps;
   const byId = new Map(steps.map((s) => [s.id, s]));
@@ -152,7 +152,8 @@ export function flatten(layout: Layout, p: Params, theme: Theme): Flat {
     .map((g) => (layout.blocks[g.step.id] ? toFlat(layout.blocks[g.step.id].waste, g) : []))
     .filter((h) => h.length > 0);
   const keepOut = union([footprints, ...folds.map((f) => rect(f.u - FOLD_KEEP_MM, f.span[0], f.u + FOLD_KEEP_MM, f.span[1]))]);
-  const motifs = p.motifs ? placeMotifs(theme, keepOut, W, L) : [];
+  // Bridge: the decor's items in the old bands until free placement lands; borders aren't drawn yet.
+  const motifs = placeMotifs(p.decor.items, keepOut, W, L);
 
   // Panels.
   const pageCut = union([footprints, ...motifs]);

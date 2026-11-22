@@ -53,10 +53,10 @@ describe('atommExportFiles', () => {
     expect(await inner(scored)).toContain(ATOMM_ENGRAVE);
   });
 
-  test('the default theme is Birthday with accents and motifs on', () => {
+  test("the default theme is Birthday with its first style's decorations", () => {
     const p = defaultParams('en-US');
     expect(p.theme).toBe('birthday');
-    expect(p.accents).toBe(true);
-    expect(p.motifs).toBe(true);
+    expect(p.decor.style).toBe('confetti');
+    expect(p.decor.items.length).toBeGreaterThan(0);
   });
 });

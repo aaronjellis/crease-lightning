@@ -6,9 +6,24 @@ export const anniversary: Theme = {
   lines: ['HAPPY ANNIVERSARY', 'ALEX & SAM'],
   font: 'Arvo',
   colours: { inner: '#fff7ee', jacket: '#8c2f39' },
-  motifs: [
-    { icon: 'heart', slot: 'back-top-row', minMm: 9, maxMm: 14, count: 5 },
-    { icon: 'sparkle-star', slot: 'base-front-left', minMm: 9, maxMm: 13, count: 2 },
-    { icon: 'sparkle-star', slot: 'base-front-right', minMm: 9, maxMm: 13, count: 2 },
+  styles: [
+    {
+      id: 'hearts',
+      name: 'Hearts',
+      border: null,
+      items: [
+        { icon: 'heart', count: 5, minMm: 9, maxMm: 14 },
+        { icon: 'sparkle-star', count: 4, minMm: 9, maxMm: 13 },
+      ],
+    },
+    {
+      id: 'standing',
+      name: 'Standing hearts',
+      border: 'heart-row',
+      items: [
+        { icon: 'heart-stand', count: 3, minMm: 10, maxMm: 14 },
+        { icon: 'sparkle-star', count: 3, minMm: 9, maxMm: 12 },
+      ],
+    },
   ],
 };

@@ -1,5 +1,5 @@
 /**
- * The theme rail: a tile per theme (jacket colour with the theme's first pop-up icon, drawn instantly
+ * The theme rail: a tile per theme (jacket colour with its first style's first icon, drawn instantly
  * from the icon data), and Surprise me.
  */
 import { polyToSvgPath } from '@kerfuffle/engine/geom';
@@ -18,8 +18,9 @@ function iconSvg(id: string): string {
 }
 
 function thumb(t: Theme): HTMLElement {
-  const art = t.motifs.length
-    ? svgFrom(iconSvg(t.motifs[0].icon))
+  const first = t.styles[0]?.items[0]?.icon;
+  const art = first
+    ? svgFrom(iconSvg(first))
     : h('span', { class: 'thumb-letter', 'aria-hidden': 'true', text: t.lines[0].charAt(0) });
   return h('span', { class: 'thumb', style: `--thumb-bg:${t.colours.jacket};--thumb-fg:${t.colours.inner}` }, art);
 }

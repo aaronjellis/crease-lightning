@@ -34,7 +34,9 @@ import toy_carSvg from './icons/toy-car.svg?raw';
 import treeSvg from './icons/tree.svg?raw';
 import type { Icon, Theme } from './types';
 
-export type { Icon, Motif, SlotId, Theme } from './types';
+export type { Icon, Style, Theme } from './types';
+export type { Border } from './borders';
+export { BORDERS, borderById } from './borders';
 export { loadIcon } from './icon';
 
 const MATERIAL = 'https://github.com/marella/material-symbols (Material Symbols, weight 700, rounded, filled)';
@@ -42,27 +44,27 @@ const ORIGINAL = 'Original artwork for this project';
 const ORIGINAL_LICENCE = 'Original work © 2026 Aaron Ellis, distributed with Crease Lightning';
 
 export const ICONS: Icon[] = [
-  loadIcon(balloonSvg, { id: 'balloon', minHeightMm: 18, source: ORIGINAL, licence: ORIGINAL_LICENCE }),
-  loadIcon(cakeSvg, { id: 'cake', minHeightMm: 18, source: `${MATERIAL}: cake`, licence: 'Apache-2.0' }),
-  loadIcon(confettiSvg, { id: 'confetti', minHeightMm: 9, source: ORIGINAL, licence: ORIGINAL_LICENCE }),
-  loadIcon(starSvg, { id: 'star', minHeightMm: 9, source: `${MATERIAL}: star`, licence: 'Apache-2.0' }),
-  loadIcon(heartSvg, { id: 'heart', minHeightMm: 8, source: `${MATERIAL}: favorite`, licence: 'Apache-2.0' }),
-  loadIcon(heart_standSvg, { id: 'heart-stand', minHeightMm: 10, source: `${MATERIAL}: favorite, with a base added`, licence: 'Apache-2.0' }),
-  loadIcon(churchSvg, { id: 'church', minHeightMm: 15, source: `${MATERIAL}: church`, licence: 'Apache-2.0' }),
-  loadIcon(wine_glassSvg, { id: 'wine-glass', minHeightMm: 13, source: `${MATERIAL}: wine_bar`, licence: 'Apache-2.0' }),
-  loadIcon(hourglassSvg, { id: 'hourglass', minHeightMm: 15, source: `${MATERIAL}: hourglass_top`, licence: 'Apache-2.0' }),
-  loadIcon(trophySvg, { id: 'trophy', minHeightMm: 13, source: `${MATERIAL}: emoji_events`, licence: 'Apache-2.0' }),
-  loadIcon(mortarboardSvg, { id: 'mortarboard', minHeightMm: 12, source: ORIGINAL, licence: ORIGINAL_LICENCE }),
-  loadIcon(sparkle_starSvg, { id: 'sparkle-star', minHeightMm: 9, source: `${MATERIAL}: kid_star`, licence: 'Apache-2.0' }),
-  loadIcon(cribSvg, { id: 'crib', minHeightMm: 13, source: `${MATERIAL}: crib`, licence: 'Apache-2.0' }),
-  loadIcon(baby_faceSvg, { id: 'baby-face', minHeightMm: 14, source: `${MATERIAL}: child_care`, licence: 'Apache-2.0' }),
-  loadIcon(cloudSvg, { id: 'cloud', minHeightMm: 8, source: `${MATERIAL}: cloud`, licence: 'Apache-2.0' }),
-  loadIcon(moonSvg, { id: 'moon', minHeightMm: 8, source: `${MATERIAL}: bedtime`, licence: 'Apache-2.0' }),
-  loadIcon(giftSvg, { id: 'gift', minHeightMm: 18, source: `${MATERIAL}: redeem`, licence: 'Apache-2.0' }),
-  loadIcon(mailSvg, { id: 'mail', minHeightMm: 11, source: `${MATERIAL}: mail`, licence: 'Apache-2.0' }),
-  loadIcon(snowflakeSvg, { id: 'snowflake', minHeightMm: 16, source: `${MATERIAL}: ac_unit`, licence: 'Apache-2.0' }),
-  loadIcon(toy_carSvg, { id: 'toy-car', minHeightMm: 18, source: `${MATERIAL}: toys (a toy car)`, licence: 'Apache-2.0' }),
-  loadIcon(treeSvg, { id: 'tree', minHeightMm: 14, source: ORIGINAL, licence: ORIGINAL_LICENCE }),
+  loadIcon(balloonSvg, { id: 'balloon', name: 'Balloon', minHeightMm: 18, defaultMm: [18, 22], source: ORIGINAL, licence: ORIGINAL_LICENCE }),
+  loadIcon(cakeSvg, { id: 'cake', name: 'Cake', minHeightMm: 18, defaultMm: [18, 22], source: `${MATERIAL}: cake`, licence: 'Apache-2.0' }),
+  loadIcon(confettiSvg, { id: 'confetti', name: 'Confetti', minHeightMm: 9, defaultMm: [9, 14], source: ORIGINAL, licence: ORIGINAL_LICENCE }),
+  loadIcon(starSvg, { id: 'star', name: 'Star', minHeightMm: 9, defaultMm: [9, 13], source: `${MATERIAL}: star`, licence: 'Apache-2.0' }),
+  loadIcon(heartSvg, { id: 'heart', name: 'Heart', minHeightMm: 8, defaultMm: [9, 14], source: `${MATERIAL}: favorite`, licence: 'Apache-2.0' }),
+  loadIcon(heart_standSvg, { id: 'heart-stand', name: 'Heart on a stand', minHeightMm: 10, defaultMm: [10, 14], source: `${MATERIAL}: favorite, with a base added`, licence: 'Apache-2.0' }),
+  loadIcon(churchSvg, { id: 'church', name: 'Church', minHeightMm: 15, defaultMm: [15, 20], source: `${MATERIAL}: church`, licence: 'Apache-2.0' }),
+  loadIcon(wine_glassSvg, { id: 'wine-glass', name: 'Wine glass', minHeightMm: 13, defaultMm: [13, 17], source: `${MATERIAL}: wine_bar`, licence: 'Apache-2.0' }),
+  loadIcon(hourglassSvg, { id: 'hourglass', name: 'Hourglass', minHeightMm: 15, defaultMm: [15, 19], source: `${MATERIAL}: hourglass_top`, licence: 'Apache-2.0' }),
+  loadIcon(trophySvg, { id: 'trophy', name: 'Trophy', minHeightMm: 13, defaultMm: [13, 17], source: `${MATERIAL}: emoji_events`, licence: 'Apache-2.0' }),
+  loadIcon(mortarboardSvg, { id: 'mortarboard', name: 'Graduation cap', minHeightMm: 12, defaultMm: [12, 16], source: ORIGINAL, licence: ORIGINAL_LICENCE }),
+  loadIcon(sparkle_starSvg, { id: 'sparkle-star', name: 'Sparkle star', minHeightMm: 9, defaultMm: [9, 13], source: `${MATERIAL}: kid_star`, licence: 'Apache-2.0' }),
+  loadIcon(cribSvg, { id: 'crib', name: 'Crib', minHeightMm: 13, defaultMm: [13, 17], source: `${MATERIAL}: crib`, licence: 'Apache-2.0' }),
+  loadIcon(baby_faceSvg, { id: 'baby-face', name: 'Baby face', minHeightMm: 14, defaultMm: [14, 18], source: `${MATERIAL}: child_care`, licence: 'Apache-2.0' }),
+  loadIcon(cloudSvg, { id: 'cloud', name: 'Cloud', minHeightMm: 8, defaultMm: [9, 14], source: `${MATERIAL}: cloud`, licence: 'Apache-2.0' }),
+  loadIcon(moonSvg, { id: 'moon', name: 'Moon', minHeightMm: 8, defaultMm: [9, 12], source: `${MATERIAL}: bedtime`, licence: 'Apache-2.0' }),
+  loadIcon(giftSvg, { id: 'gift', name: 'Gift', minHeightMm: 18, defaultMm: [18, 22], source: `${MATERIAL}: redeem`, licence: 'Apache-2.0' }),
+  loadIcon(mailSvg, { id: 'mail', name: 'Envelope', minHeightMm: 11, defaultMm: [11, 15], source: `${MATERIAL}: mail`, licence: 'Apache-2.0' }),
+  loadIcon(snowflakeSvg, { id: 'snowflake', name: 'Snowflake', minHeightMm: 16, defaultMm: [16, 20], source: `${MATERIAL}: ac_unit`, licence: 'Apache-2.0' }),
+  loadIcon(toy_carSvg, { id: 'toy-car', name: 'Toy car', minHeightMm: 18, defaultMm: [18, 22], source: `${MATERIAL}: toys (a toy car)`, licence: 'Apache-2.0' }),
+  loadIcon(treeSvg, { id: 'tree', name: 'Tree', minHeightMm: 14, defaultMm: [14, 18], source: ORIGINAL, licence: ORIGINAL_LICENCE }),
 ];
 
 export const THEMES: Theme[] = [birthday, anniversary, wedding, graduation, babyGirl, babyBoy, christmas, newYear, thankYou, love, blank];

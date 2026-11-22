@@ -6,9 +6,24 @@ export const graduation: Theme = {
   lines: ['CONGRATS GRAD', 'CLASS OF 2027'],
   font: 'Arvo',
   colours: { inner: '#ffffff', jacket: '#1f3a5f' },
-  motifs: [
-    { icon: 'star', slot: 'back-top-row', minMm: 9, maxMm: 14, count: 5 },
-    { icon: 'sparkle-star', slot: 'base-front-left', minMm: 9, maxMm: 13, count: 2 },
-    { icon: 'sparkle-star', slot: 'base-front-right', minMm: 9, maxMm: 13, count: 2 },
+  styles: [
+    {
+      id: 'caps',
+      name: 'Caps',
+      border: null,
+      items: [
+        { icon: 'star', count: 5, minMm: 9, maxMm: 14 },
+        { icon: 'sparkle-star', count: 4, minMm: 9, maxMm: 13 },
+      ],
+    },
+    {
+      id: 'honours',
+      name: 'Honours',
+      border: 'star-row',
+      items: [
+        { icon: 'mortarboard', count: 3, minMm: 12, maxMm: 16 },
+        { icon: 'star', count: 4, minMm: 9, maxMm: 12 },
+      ],
+    },
   ],
 };

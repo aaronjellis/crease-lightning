@@ -8,7 +8,7 @@ import type { Icon } from './types';
  */
 export function loadIcon(
   svgText: string,
-  meta: { id: string; minHeightMm: number; source: string; licence: string },
+  meta: Omit<Icon, 'poly'>,
 ): Icon {
   const shape = parseSvgShape(svgText, 0);
   // The tolerance is in viewBox units; a thousandth of the width keeps curves smooth.

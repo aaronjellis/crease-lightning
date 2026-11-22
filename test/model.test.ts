@@ -8,12 +8,25 @@ import {
   withSize,
   type ThemeDefaults,
 } from '../src/core/model';
+import {
+  addItem,
+  decorFromStyle,
+  moveItem,
+  nextItemId,
+  removeItem,
+  resizeItem,
+  shuffle,
+  unpinAll,
+} from '../src/core/decor/model';
+import type { Decor } from '../src/core/decor/types';
+import { iconById, themeById } from '../src/themes';
 
 const christmasStub: ThemeDefaults = {
   id: 'christmas',
   lines: ['MERRY CHRISTMAS', ''],
   font: 'Alfa Slab One',
   colours: { inner: '#ffffff', jacket: '#1f7a3a' },
+  styles: [],
 };
 
 describe('model', () => {
@@ -35,16 +48,17 @@ describe('model', () => {
   test('defaults', () => {
     const p = defaultParams('en-US');
     expect(p).toMatchObject({
-      version: 1,
+      version: 2,
       theme: 'birthday',
       spacing: 'tight',
       allCaps: true,
       autoSplit: true,
-      accents: true,
-      motifs: true,
       spine: 'long',
       overrides: {},
     });
+    expect(p.decor).toEqual(decorFromStyle(themeById('birthday'), 'confetti', 1));
+    expect('accents' in p).toBe(false);
+    expect('motifs' in p).toBe(false);
     expect(p.advanced).toMatchObject({ overhangMm: 3, railMm: 5, clearanceMm: 2, foldStyle: 'auto' });
   });
   test('theme switch keeps typed text, replaces untouched defaults', () => {
@@ -84,6 +98,7 @@ describe('model', () => {
     lines: ['CONGRATULATIONS', 'MR AND MRS'],
     font: 'Arvo',
     colours: { inner: '#ffffff', jacket: '#d9c7a3' },
+    styles: [],
   };
   test('non-birthday switch replaces untouched prev defaults', () => {
     const p = applyTheme(defaultParams('en-US'), christmasStub, BIRTHDAY_DEFAULTS);
@@ -108,5 +123,71 @@ describe('model', () => {
     const q = applyTheme(p, weddingStub, BIRTHDAY_DEFAULTS);
     expect(q.line1).toBe('CONGRATULATIONS');
     expect(q.line2).toBe('GRANDMA');
+  });
+  test('Birthday to Christmas gives Christmas its first style and keeps the seed', () => {
+    const christmas = themeById('christmas');
+    const p = defaultParams('en-US');
+    const q = applyTheme({ ...p, decor: { ...p.decor, seed: 77 } }, christmas, themeById('birthday'));
+    expect(q.decor).toEqual(decorFromStyle(christmas, christmas.styles[0].id, 77));
+    expect(q.decor.style).toBe('holly');
+  });
+  test('a theme with no styles clears the decor but keeps the seed', () => {
+    const p = defaultParams('en-US');
+    expect(applyTheme({ ...p, decor: { ...p.decor, seed: 9 } }, themeById('blank'), themeById('birthday')).decor).toEqual({
+      style: null,
+      border: null,
+      seed: 9,
+      items: [],
+    });
+  });
+});
+
+describe('decor model', () => {
+  const birthday = themeById('birthday');
+  const base: Decor = decorFromStyle(birthday, 'confetti', 1);
+
+  test("a style expands by count into items i1, i2, … with the style's sizes", () => {
+    const style = birthday.styles.find((s) => s.id === 'confetti')!;
+    const expected = style.items.flatMap((it) => Array.from({ length: it.count }, () => ({ icon: it.icon, minMm: it.minMm, maxMm: it.maxMm })));
+    expect(base.items.map(({ id: _id, ...rest }) => rest)).toEqual(expected);
+    expect(base.items.map((i) => i.id)).toEqual(expected.map((_, k) => `i${k + 1}`));
+    expect(base).toMatchObject({ style: 'confetti', border: style.border, seed: 1 });
+  });
+  test('no style, or one the theme lacks, is an empty decor', () => {
+    expect(decorFromStyle(birthday, null, 5)).toEqual({ style: null, border: null, seed: 5, items: [] });
+    expect(decorFromStyle(birthday, 'holly', 5)).toEqual({ style: null, border: null, seed: 5, items: [] });
+  });
+  test('nextItemId is one past the largest', () => {
+    expect(nextItemId([])).toBe('i1');
+    expect(nextItemId([{ id: 'i3', icon: 'star', minMm: 9, maxMm: 13 }, { id: 'i10', icon: 'star', minMm: 9, maxMm: 13 }])).toBe('i11');
+  });
+  test("addItem appends the icon at its default size range", () => {
+    const d = addItem(base, 'balloon');
+    const [lo, hi] = iconById('balloon').defaultMm;
+    expect(d.items).toHaveLength(base.items.length + 1);
+    expect(d.items.at(-1)).toEqual({ id: `i${base.items.length + 1}`, icon: 'balloon', minMm: lo, maxMm: hi });
+    expect(base.items).toHaveLength(10);
+  });
+  test('removeItem drops only that item', () => {
+    const d = removeItem(base, 'i2');
+    expect(d.items.map((i) => i.id)).not.toContain('i2');
+    expect(d.items).toHaveLength(base.items.length - 1);
+  });
+  test('moveItem pins, resizeItem fixes the size, unpinAll unpins and keeps sizes', () => {
+    const moved = moveItem(base, 'i1', { page: 'base', u: 0.3, v: 0.6 });
+    expect(moved.items[0].at).toEqual({ page: 'base', u: 0.3, v: 0.6 });
+    expect(moved.items[1].at).toBeUndefined();
+    const sized = resizeItem(moved, 'i1', 12);
+    expect(sized.items[0].sizeMm).toBe(12);
+    const free = unpinAll(sized);
+    expect(free.items.every((i) => !('at' in i))).toBe(true);
+    expect(free.items[0].sizeMm).toBe(12);
+    expect(base.items[0].at).toBeUndefined();
+  });
+  test('shuffle picks a new 32-bit seed and keeps the items', () => {
+    const d = shuffle(base);
+    expect(d.seed).not.toBe(base.seed);
+    expect(Number.isInteger(d.seed) && d.seed >= 0 && d.seed < 2 ** 32).toBe(true);
+    expect(d.items).toEqual(base.items);
   });
 });

@@ -1,7 +1,16 @@
 import { WEB_MM } from './constants';
+import { decorFromStyle } from './decor/model';
+import type { Decor, DecorItem } from './decor/types';
 import { SLAB_FONTS } from './fonts';
 import { THEME_IDS, type FoldStyle, type Params, type Spacing, type StepDims } from './model';
-import { themeById } from '../themes';
+import { BORDERS, ICONS, themeById, type Theme } from '../themes';
+
+/** The `Params` version this build writes. */
+const VERSION = 2;
+/** The most decoration items a card keeps. */
+export const MAX_ITEMS = 40;
+/** The largest decoration size, in mm. */
+export const MAX_ITEM_MM = 60;
 
 /** The message inputs' `maxlength` (UTF-16 units, as the browser counts). */
 export const MAX_LINE_CHARS = 40;
@@ -39,19 +48,66 @@ function stepDims(v: unknown): StepDims | undefined | null {
   return out;
 }
 
+const ITEM_ID = /^[A-Za-z0-9_-]{1,16}$/;
+
+/** A valid item, clamped, or null to drop it. */
+function decorItem(v: unknown, seen: Set<string>): DecorItem | null {
+  if (!isObj(v) || typeof v.id !== 'string' || !ITEM_ID.test(v.id) || seen.has(v.id)) return null;
+  const icon = ICONS.find((i) => i.id === v.icon);
+  if (!icon) return null;
+  const lo = Math.min(icon.minHeightMm, MAX_ITEM_MM);
+  const minMm = num(v.minMm, lo, MAX_ITEM_MM);
+  const maxRaw = num(v.maxMm, lo, MAX_ITEM_MM);
+  if (minMm === null || maxRaw === null) return null;
+  const item: DecorItem = { id: v.id, icon: icon.id, minMm, maxMm: Math.max(minMm, maxRaw) };
+  const sizeMm = num(v.sizeMm, lo, MAX_ITEM_MM);
+  if (sizeMm !== null) item.sizeMm = sizeMm;
+  const at = v.at;
+  if (isObj(at) && (at.page === 'back' || at.page === 'base')) {
+    const u = num(at.u, 0, 1);
+    const w = num(at.v, 0, 1);
+    if (u !== null && w !== null) item.at = { page: at.page, u, v: w };
+  }
+  seen.add(v.id);
+  return item;
+}
+
+/**
+ * A version 2 decor: an unknown style or border becomes null, items with unknown icons or bad fields
+ * drop, at most {@link MAX_ITEMS} stay, sizes clamp to [icon minimum, {@link MAX_ITEM_MM}], pins clamp to
+ * [0, 1], and the seed becomes a 32-bit unsigned integer. Null if the shape is wrong.
+ */
+function decorOf(v: unknown, theme: Theme): Decor | null {
+  if (!isObj(v) || !Array.isArray(v.items)) return null;
+  if (typeof v.seed !== 'number' || !Number.isFinite(v.seed)) return null;
+  const style = typeof v.style === 'string' && theme.styles.some((s) => s.id === v.style) ? v.style : null;
+  const border = typeof v.border === 'string' && BORDERS.some((b) => b.id === v.border) ? v.border : null;
+  const items: DecorItem[] = [];
+  const seen = new Set<string>();
+  for (const it of v.items) {
+    if (items.length >= MAX_ITEMS) break;
+    const item = decorItem(it, seen);
+    if (item) items.push(item);
+  }
+  return { style, border, seed: v.seed >>> 0, items };
+}
+
 /**
  * Validates every field, clamps numbers to their ranges, drops unknown fields. Null if invalid. Lines
  * longer than the inputs allow are cut to 40 characters, and an unknown font becomes the theme's.
+ *
+ * Version 1 upgrades: `accents` drops; `motifs: true` becomes the theme's first style with seed 1, and
+ * `motifs: false` no style, border or items.
  */
 export function migrate(raw: unknown): Params | null {
-  if (!isObj(raw) || raw.version !== 1) return null;
+  if (!isObj(raw) || (raw.version !== 1 && raw.version !== VERSION)) return null;
   const { theme, line1, line2, font, spacing, size, spine } = raw;
   if (typeof theme !== 'string' || !(THEME_IDS as readonly string[]).includes(theme)) return null;
   if (typeof line1 !== 'string' || typeof line2 !== 'string' || typeof font !== 'string') return null;
   if (!SPACINGS.includes(spacing as Spacing)) return null;
   if (!(SIZES as readonly unknown[]).includes(size)) return null;
   if (spine !== 'long' && spine !== 'short') return null;
-  for (const k of ['autoSplit', 'allCaps', 'accents', 'motifs'] as const) {
+  for (const k of raw.version === 1 ? (['autoSplit', 'allCaps', 'accents', 'motifs'] as const) : (['autoSplit', 'allCaps'] as const)) {
     if (typeof raw[k] !== 'boolean') return null;
   }
   const c = raw.colours;
@@ -75,10 +131,13 @@ export function migrate(raw: unknown): Params | null {
   const advanced: Params['advanced'] = { overhangMm, railMm, clearanceMm, foldStyle: a.foldStyle as FoldStyle };
   if (l1) advanced.line1 = l1;
   if (l2) advanced.line2 = l2;
+  const t = themeById(theme as Params['theme']);
+  const decor = raw.version === 1 ? decorFromStyle(t, raw.motifs ? (t.styles[0]?.id ?? null) : null, 1) : decorOf(raw.decor, t);
+  if (!decor) return null;
   // A link or file names its own font: only the families the app offers load; anything else is the theme's (M6).
-  const knownFont = SLAB_FONTS.some((f) => f.family === font) ? font : themeById(theme as Params['theme']).font;
+  const knownFont = SLAB_FONTS.some((f) => f.family === font) ? font : t.font;
   return {
-    version: 1,
+    version: VERSION,
     theme: theme as Params['theme'],
     line1: capLine(line1),
     line2: capLine(line2),
@@ -89,8 +148,7 @@ export function migrate(raw: unknown): Params | null {
     size: size as Params['size'],
     spine,
     colours: { inner: c.inner, jacket: c.jacket },
-    accents: raw.accents as boolean,
-    motifs: raw.motifs as boolean,
+    decor,
     advanced,
     overrides,
   };
@@ -137,7 +195,7 @@ export function loadJson(text: string): LoadResult {
   } catch {
     return { ok: false, error: 'not-json' };
   }
-  if (isObj(raw) && typeof raw.version === 'number' && raw.version > 1) {
+  if (isObj(raw) && typeof raw.version === 'number' && raw.version > VERSION) {
     return { ok: false, error: 'newer-version' };
   }
   const params = migrate(raw);

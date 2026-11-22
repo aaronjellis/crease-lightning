@@ -5,7 +5,7 @@ import { fitLayout } from '../src/core/fit';
 import { testFonts } from './helpers/fonts';
 import { MIN_STROKE_BLADE_MM, PLINTH_MIN_MM } from '../src/core/constants';
 import { buildIconBlock, thinArea } from '../src/core/text';
-import { ICONS, THEMES, iconById, loadIcon, themeById } from '../src/themes';
+import { BORDERS, ICONS, THEMES, borderById, iconById, loadIcon, themeById } from '../src/themes';
 
 /** How many holes are narrower than 1 mm: those that vanish under a 0.5 mm inward offset. */
 const narrowHoles = (p: Poly): number =>
@@ -51,7 +51,7 @@ describe('icons', () => {
 
   test('loadIcon flips y so the SVG top ends up at the top', () => {
     const icon = loadIcon('<svg viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="2"/><rect x="0" y="0" width="2" height="10"/></svg>', {
-      id: 't', minHeightMm: 1, source: 's', licence: 'l',
+      id: 't', name: 'T', minHeightMm: 1, defaultMm: [1, 2], source: 's', licence: 'l',
     });
     const top = bounds(intersect(icon.poly, [[{ x: -1, y: 0.9 }, { x: 2, y: 0.9 }, { x: 2, y: 1 }, { x: -1, y: 1 }]]))!;
     expect(top.w).toBeCloseTo(1, 2);
@@ -60,37 +60,104 @@ describe('icons', () => {
   test('unknown ids throw', () => {
     expect(() => iconById('nope')).toThrow();
     expect(() => themeById('nope' as ThemeId)).toThrow();
+    expect(() => borderById('nope')).toThrow();
+  });
+
+  test.each(ICONS.map((i) => i.id))('%s has a name and a default size range no smaller than its minimum', (id) => {
+    const i = iconById(id);
+    expect(i.name.trim()).not.toBe('');
+    expect(i.defaultMm[0]).toBeGreaterThanOrEqual(i.minHeightMm);
+    expect(i.defaultMm[1]).toBeGreaterThanOrEqual(i.defaultMm[0]);
+  });
+});
+
+const styleIcons = new Set(THEMES.flatMap((t) => t.styles.flatMap((st) => st.items.map((it) => it.icon))));
+
+describe('borders', () => {
+  test('the seed patterns exist, each tiled with a known icon', () => {
+    expect(BORDERS.map((b) => b.id).sort()).toEqual(['confetti-row', 'heart-row', 'snow-row', 'star-row']);
+    for (const b of BORDERS) {
+      expect(borderById(b.id)).toBe(b);
+      expect(b.name.trim()).not.toBe('');
+      expect(() => iconById(b.tile)).not.toThrow();
+      if (b.corner) expect(() => iconById(b.corner!)).not.toThrow();
+      expect(b.sizeFrac).toBeGreaterThan(0);
+      expect(b.minMm).toBeGreaterThanOrEqual(iconById(b.tile).minHeightMm);
+      expect(b.gapMm).toBeGreaterThan(0);
+    }
+  });
+
+  test('border tiles have no holes', () => {
+    for (const b of BORDERS) expect(iconById(b.tile).poly.filter((c) => !outerCount([c])), b.id).toEqual([]);
   });
 });
 
 describe('themes', () => {
-  test('every motif icon resolves, and motif sizes respect the icon minimum', () => {
+  test('every theme but Blank has two or three styles with unique ids; Blank has none', () => {
     for (const t of THEMES) {
-      for (const m of t.motifs) {
-        const i = iconById(m.icon);
-        expect(m.minMm).toBeGreaterThanOrEqual(i.minHeightMm);
-        expect(m.maxMm).toBeGreaterThanOrEqual(m.minMm);
-        expect(m.count).toBeGreaterThan(0);
+      if (t.id === 'blank') {
+        expect(t.styles).toEqual([]);
+        continue;
+      }
+      expect(t.styles.length, t.id).toBeGreaterThanOrEqual(2);
+      expect(t.styles.length, t.id).toBeLessThanOrEqual(3);
+      expect(new Set(t.styles.map((st) => st.id)).size, t.id).toBe(t.styles.length);
+    }
+  });
+
+  test('style ids match the final set (R1)', () => {
+    const ids = (id: ThemeId) => themeById(id).styles.map((st) => st.id);
+    expect(ids('birthday')).toEqual(['confetti', 'balloons', 'candles']);
+    expect(ids('baby-girl')).toEqual(['stork', 'nursery']);
+    expect(ids('baby-boy')).toEqual(['stork', 'nursery']);
+    expect(ids('graduation')).toEqual(['caps', 'honours']);
+    expect(ids('christmas')).toEqual(['holly', 'snow']);
+  });
+
+  test("every style's icons and border exist, and its sizes respect the icon minimum", () => {
+    for (const t of THEMES) {
+      for (const st of t.styles) {
+        expect(st.name.trim(), `${t.id}/${st.id}`).not.toBe('');
+        if (st.border !== null) expect(() => borderById(st.border!), `${t.id}/${st.id}`).not.toThrow();
+        expect(st.items.length, `${t.id}/${st.id}`).toBeGreaterThan(0);
+        for (const it of st.items) {
+          const i = iconById(it.icon);
+          expect(it.minMm, `${t.id}/${st.id}/${it.icon}`).toBeGreaterThanOrEqual(i.minHeightMm);
+          expect(it.maxMm).toBeGreaterThanOrEqual(it.minMm);
+          expect(it.maxMm).toBeLessThanOrEqual(60);
+          expect(it.count).toBeGreaterThan(0);
+        }
       }
     }
   });
 
-  test('motif icons have no holes: an island inside a cut-through would fall out of the page', () => {
-    for (const id of new Set(THEMES.flatMap((t) => t.motifs.map((m) => m.icon)))) {
+  test("each theme's first style has no border", () => {
+    for (const t of THEMES.filter((x) => x.styles.length)) expect(t.styles[0].border, t.id).toBeNull();
+  });
+
+  test('style icons have no holes: an island inside a cut-through would fall out of the page', () => {
+    for (const id of styleIcons) {
       expect(iconById(id).poly.filter((c) => !outerCount([c])), id).toEqual([]);
     }
+  });
+
+  test("Birthday's first style is today's motifs: six confetti and four stars", () => {
+    expect(themeById('birthday').styles[0].items).toEqual([
+      { icon: 'confetti', count: 6, minMm: 9, maxMm: 14 },
+      { icon: 'star', count: 4, minMm: 9, maxMm: 13 },
+    ]);
   });
 
   test('Birthday', () => {
     const t = themeById('birthday');
     expect(t.lines).toEqual(['HAPPY BIRTHDAY', 'SAM']);
     expect(t.font).toBe('Arvo');
-    expect(t.motifs.length).toBeGreaterThan(0);
+    expect(t.styles.length).toBeGreaterThan(0);
   });
 
-  test('Blank has no motifs', () => {
+  test('Blank has no styles', () => {
     const t = themeById('blank');
-    expect(t.motifs).toEqual([]);
+    expect(t.styles).toEqual([]);
     expect(t.lines).toEqual(['HELLO', '']);
     expect(t.font).toBe('Arvo');
     expect(t.colours).toEqual({ inner: '#ffffff', jacket: '#2f5d8a' });
@@ -100,7 +167,7 @@ describe('themes', () => {
     const defaults: ThemeDefaults[] = THEMES;
     expect(defaults.length).toBe(THEMES.length);
     const b = themeById('birthday');
-    expect(BIRTHDAY_DEFAULTS).toEqual({ id: b.id, lines: b.lines, font: b.font, colours: b.colours });
+    expect(BIRTHDAY_DEFAULTS).toEqual({ id: b.id, lines: b.lines, font: b.font, colours: b.colours, styles: b.styles });
   });
 });
 
@@ -118,13 +185,8 @@ describe('launch themes', () => {
     love: { lines: ['LOVE YOU', 'ALWAYS'], jacket: '#c2185b' },
   };
 
-  test('there are ten themed cards plus Blank, each with two or three motif kinds', () => {
+  test('there are ten themed cards plus Blank', () => {
     expect(THEMES.map((t) => t.id).sort()).toEqual([...Object.keys(EXPECTED), 'blank'].sort());
-    for (const t of THEMES.filter((x) => x.id !== 'blank')) {
-      const kinds = new Set(t.motifs.map((m) => m.icon)).size;
-      expect(kinds, t.id).toBeGreaterThanOrEqual(2);
-      expect(kinds, t.id).toBeLessThanOrEqual(3);
-    }
   });
 
   test.each(Object.entries(EXPECTED))('%s has its default lines and colours', (id, e) => {

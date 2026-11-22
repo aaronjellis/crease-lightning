@@ -6,9 +6,33 @@ export const birthday: Theme = {
   lines: ['HAPPY BIRTHDAY', 'SAM'],
   font: 'Arvo',
   colours: { inner: '#ffffff', jacket: '#e8453c' },
-  motifs: [
-    { icon: 'confetti', slot: 'back-top-row', minMm: 9, maxMm: 14, count: 6 },
-    { icon: 'star', slot: 'base-front-left', minMm: 9, maxMm: 13, count: 2 },
-    { icon: 'star', slot: 'base-front-right', minMm: 9, maxMm: 13, count: 2 },
+  styles: [
+    {
+      id: 'confetti',
+      name: 'Confetti',
+      border: null,
+      items: [
+        { icon: 'confetti', count: 6, minMm: 9, maxMm: 14 },
+        { icon: 'star', count: 4, minMm: 9, maxMm: 13 },
+      ],
+    },
+    {
+      id: 'balloons',
+      name: 'Balloons',
+      border: null,
+      items: [
+        { icon: 'balloon', count: 3, minMm: 18, maxMm: 22 },
+        { icon: 'star', count: 3, minMm: 9, maxMm: 12 },
+      ],
+    },
+    {
+      id: 'candles',
+      name: 'Candles',
+      border: 'confetti-row',
+      items: [
+        { icon: 'cake', count: 2, minMm: 18, maxMm: 22 },
+        { icon: 'star', count: 4, minMm: 9, maxMm: 12 },
+      ],
+    },
   ],
 };

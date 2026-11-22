@@ -64,7 +64,7 @@ function randomParams(r: () => number): Params {
     spacing: SPACINGS[Math.floor(r() * SPACINGS.length)],
     size: SIZES[Math.floor(r() * SIZES.length)],
     spine: r() < 0.5 ? 'long' : 'short',
-    accents: r() < 0.7,
+    decor: r() < 0.7 ? base.decor : { ...base.decor, style: null, border: null, items: [] },
   };
 }
 

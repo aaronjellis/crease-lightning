@@ -6,10 +6,26 @@ export const babyBoy: Theme = {
   lines: ['WELCOME', 'BABY BOY'],
   font: 'Arvo',
   colours: { inner: '#ffffff', jacket: '#8fc1e8' },
-  motifs: [
-    { icon: 'star', slot: 'back-top-row', minMm: 9, maxMm: 14, count: 5 },
-    { icon: 'cloud', slot: 'base-front-left', minMm: 9, maxMm: 14, count: 1 },
-    { icon: 'cloud', slot: 'base-front-right', minMm: 9, maxMm: 14, count: 1 },
-    { icon: 'moon', slot: 'base-front-right', minMm: 9, maxMm: 12, count: 1 },
+  styles: [
+    {
+      id: 'stork',
+      name: 'Stork',
+      border: null,
+      items: [
+        { icon: 'star', count: 5, minMm: 9, maxMm: 14 },
+        { icon: 'cloud', count: 2, minMm: 9, maxMm: 14 },
+        { icon: 'moon', count: 1, minMm: 9, maxMm: 12 },
+      ],
+    },
+    {
+      id: 'nursery',
+      name: 'Nursery',
+      border: null,
+      items: [
+        { icon: 'moon', count: 2, minMm: 9, maxMm: 12 },
+        { icon: 'cloud', count: 2, minMm: 9, maxMm: 14 },
+        { icon: 'star', count: 3, minMm: 9, maxMm: 12 },
+      ],
+    },
   ],
 };
