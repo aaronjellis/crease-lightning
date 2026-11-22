@@ -195,6 +195,16 @@ describe('decor model', () => {
     expect(shuffle({ ...base, seed: 2 ** 30 }, () => 0.25).seed).toBe(2 ** 30 + 1);
     expect(shuffle(base, () => 0.25)).toEqual(shuffle(base, () => 0.25));
   });
+  test('moveItem stores the size it was dropped at, within the item range and the icon minimum', () => {
+    const [i1] = base.items;
+    const at = { page: 'base' as const, u: 0.5, v: 0.5 };
+    expect(moveItem(base, 'i1', at, i1.minMm + 1).items[0].sizeMm).toBe(i1.minMm + 1);
+    expect(moveItem(base, 'i1', at, 999).items[0].sizeMm).toBe(i1.maxMm);
+    expect(moveItem(base, 'i1', at, 0).items[0].sizeMm).toBe(Math.max(i1.minMm, iconById(i1.icon).minHeightMm));
+    // A size the user set stays.
+    expect(moveItem(resizeItem(base, 'i1', 40), 'i1', at, 12).items[0].sizeMm).toBe(40);
+    expect(moveItem(base, 'i1', at).items[0].sizeMm).toBeUndefined();
+  });
   test('moveItem clamps the pin to the usable rectangle', () => {
     const moved = moveItem(base, 'i1', { page: 'back', u: 1.4, v: -0.2 });
     expect(moved.items[0].at).toEqual({ page: 'back', u: 1, v: 0 });

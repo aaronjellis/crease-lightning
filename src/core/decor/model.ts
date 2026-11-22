@@ -43,9 +43,18 @@ const edit = (decor: Decor, id: string, f: (i: DecorItem) => DecorItem): Decor =
 
 const clamp01 = (t: number): number => Math.min(1, Math.max(0, t));
 
-/** Pins the item at `at` (fractions of the page's usable rectangle, clamped to [0, 1]). */
-export function moveItem(decor: Decor, id: string, at: { page: Page; u: number; v: number }): Decor {
-  return edit(decor, id, (i) => ({ ...i, at: { page: at.page, u: clamp01(at.u), v: clamp01(at.v) } }));
+/**
+ * Pins the item at `at` (fractions of the page's usable rectangle, clamped to [0, 1]). Pass the size
+ * it is shown at (`PlacedItem.sizeMm`) so it stays that size: it is stored, clamped to the item's
+ * [minMm, maxMm] and never under the icon's minimum. An item the user already sized keeps its size.
+ */
+export function moveItem(decor: Decor, id: string, at: { page: Page; u: number; v: number }, sizeMm?: number): Decor {
+  return edit(decor, id, (i) => {
+    const pin = { page: at.page, u: clamp01(at.u), v: clamp01(at.v) };
+    if (i.sizeMm !== undefined || sizeMm === undefined) return { ...i, at: pin };
+    const size = Math.max(iconById(i.icon).minHeightMm, Math.min(i.maxMm, Math.max(i.minMm, sizeMm)));
+    return { ...i, at: pin, sizeMm: size };
+  });
 }
 
 /** Fixes the item's size. */

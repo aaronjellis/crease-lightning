@@ -15,9 +15,12 @@ const STEP_EVERY = 40;
 /** The item's seeded starting size in [minMm, maxMm]: the first draw of its list. */
 const startOf = (item: DecorItem, r: () => number): number => item.minMm + r() * (item.maxMm - item.minMm);
 
-/** The size a pinned item is shown at: its fixed size, else its seeded starting size; never under the icon's minimum. */
-export function pinnedSize(item: DecorItem, seed: number): number {
-  return atLeastMin(item.icon, item.sizeMm ?? startOf(item, rng(seed, item.id)));
+/**
+ * The size a pinned item is shown at: its fixed size (`moveItem` stores the size it was dropped at),
+ * else its minimum. Never from the seed, so Shuffle never resizes a pin; never under the icon's minimum.
+ */
+export function pinnedSize(item: DecorItem): number {
+  return atLeastMin(item.icon, item.sizeMm ?? item.minMm);
 }
 
 /**

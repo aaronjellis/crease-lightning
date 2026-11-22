@@ -5,8 +5,8 @@
  *
  * Rules (from the spec): every cut keeps a web (`WEB_MM`) from the keep-out (strip footprints and
  * folds), from every border tile and from every other item, and stays inside the margin on its own
- * page. A pinned item that no longer fits scatters for this build only, marked `displaced`; its pin
- * stays in the params.
+ * page. A pinned item that no longer fits takes, for this build only, the fitting candidate of its
+ * own scatter list nearest its pin, marked `displaced`; its pin stays in the params.
  */
 import { area, bounds, grow, intersect, type Poly, type Pt, type Rect } from '@kerfuffle/engine/geom';
 import { MARGIN_MM, PREVIEW_TOL_MM, WEB_MM } from '../constants';
@@ -114,7 +114,7 @@ export function placeDecor(decor: Decor, keepOut: Poly, W: number, L: number): D
   const atPin = new Set<string>();
   for (const item of decor.items) {
     if (!item.at) continue;
-    const s: Spot = { id: item.id, icon: item.icon, page: item.at.page, centre: fromPin(item.at, W, L), sizeMm: pinnedSize(item, decor.seed) };
+    const s: Spot = { id: item.id, icon: item.icon, page: item.at.page, centre: fromPin(item.at, W, L), sizeMm: pinnedSize(item) };
     if (!canPlace(layout, s, W, L)) continue;
     layout.items.push(placed(s, true, false));
     atPin.add(item.id);
@@ -123,10 +123,20 @@ export function placeDecor(decor: Decor, keepOut: Poly, W: number, L: number): D
   for (const item of decor.items) {
     if (atPin.has(item.id)) continue;
     let spot: Spot | null = null;
-    for (const s of candidates(item, decor.seed, W, L)) {
-      if (canPlace(layout, s, W, L)) {
-        spot = s;
-        break;
+    if (item.at) {
+      // Displaced: the fitting candidate nearest the pin (ties go to the earlier one).
+      const pin = fromPin(item.at, W, L);
+      let best = Infinity;
+      for (const s of candidates(item, decor.seed, W, L)) {
+        const d = Math.hypot(s.centre.x - pin.x, s.centre.y - pin.y);
+        if (d < best && canPlace(layout, s, W, L)) [spot, best] = [s, d];
+      }
+    } else {
+      for (const s of candidates(item, decor.seed, W, L)) {
+        if (canPlace(layout, s, W, L)) {
+          spot = s;
+          break;
+        }
       }
     }
     if (spot) layout.items.push(placed(spot, !!item.at, !!item.at));

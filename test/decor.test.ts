@@ -10,6 +10,7 @@ import { addItem, decorFromStyle, moveItem, removeItem, resizeItem, shuffle } fr
 import { fromPin, iconPoly, toPin } from '../src/core/decor/geometry';
 import { canPlace, placeDecor, type DecorLayout, type PlacedItem } from '../src/core/decor/place';
 import { rng } from '../src/core/decor/rng';
+import { candidates } from '../src/core/decor/scatter';
 import type { Decor } from '../src/core/decor/types';
 import { foldU } from '../src/core/linkage';
 import { cardDims, defaultParams, withSize, type Params } from '../src/core/model';
@@ -248,6 +249,15 @@ describe('decor in build', () => {
       expect(it.pinned).toBe(true);
       expect(card.params.decor.items[0].at).toEqual(at);
       expect(card.notes).toContainEqual({ level: 'info', message: "1 illustration is out of its spot until there's room." });
+      // It shows at the fitting candidate of its own list nearest its pin: no farther than the first
+      // fitting one, and the nearest of all of them.
+      const pin = fromPin(at!, W, L);
+      const dist = (c: Pt) => Math.hypot(c.x - pin.x, c.y - pin.y);
+      const empty: DecorLayout = { ...card.decor, border: [], items: [], missing: [] };
+      const fitting = [...candidates(card.params.decor.items[0], card.params.decor.seed, W, L)].filter((s) => canPlace(empty, s, W, L));
+      expect(fitting.length).toBeGreaterThan(1);
+      expect(dist(it.centre)).toBeLessThanOrEqual(dist(fitting[0].centre));
+      expect(dist(it.centre)).toBe(Math.min(...fitting.map((s) => dist(s.centre))));
     });
 
     test('switching back to one line returns it to its pin', () => {
@@ -257,6 +267,33 @@ describe('decor in build', () => {
       expect(it.centre).toEqual(fromPin(at!, W, L));
       expect(card.notes.map((n) => n.message)).not.toContain("1 illustration is out of its spot until there's room.");
     });
+  });
+
+  test('a pinned item with no size keeps its centre and size whatever the seed', () => {
+    const d = moveItem(decorFromStyle(birthday, 'confetti', 1), 'i1', { page: 'back', u: 0.75, v: 0.15 });
+    expect(d.items[0].sizeMm).toBeUndefined();
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 10; seed++) {
+      const it = make(withDecor(P0, { ...d, seed })).decor.items.find((i) => i.id === 'i1')!;
+      expect(it.displaced, `seed ${seed}`).toBe(false);
+      seen.add(JSON.stringify([it.centre, it.sizeMm]));
+    }
+    expect(seen.size).toBe(1);
+  });
+
+  test('pinning an item where it shows, at the size it shows, keeps it there on the next build', () => {
+    const p = withDecor(P0, decorFromStyle(birthday, 'confetti', 4));
+    const { W, L } = cardDims(p);
+    const before = make(p).decor;
+    for (const it of before.items) {
+      const after = make(withDecor(p, moveItem(p.decor, it.id, toPin(it.page, it.centre, W, L), it.sizeMm))).decor;
+      const now = after.items.find((i) => i.id === it.id)!;
+      expect(now.pinned, it.id).toBe(true);
+      expect(now.displaced, it.id).toBe(false);
+      expect(now.sizeMm, it.id).toBeCloseTo(it.sizeMm, 9);
+      expect(now.centre.x, it.id).toBeCloseTo(it.centre.x, 9);
+      expect(now.centre.y, it.id).toBeCloseTo(it.centre.y, 9);
+    }
   });
 
   test('a pin keeps its fraction through a size change', () => {
