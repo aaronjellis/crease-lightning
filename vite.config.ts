@@ -11,5 +11,5 @@ export default defineConfig({
   // Pre-bundling would move HarfBuzz away from the .wasm file it loads beside itself.
   optimizeDeps: { exclude: ['harfbuzzjs'] },
   // Kerfuffle's own tests run in Kerfuffle; these are the generator's.
-  test: { environment: 'node', include: ['test/**/*.test.ts'] },
+  test: { environment: 'node', include: ['test/**/*.test.ts'], setupFiles: ['test/helpers/yield.ts'] },
 });

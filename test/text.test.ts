@@ -217,9 +217,9 @@ describe('buildBlock', () => {
     }
   });
 
-  test('every bridge is at least 1.5 mm wide', () => {
+  describe('every bridge is at least 1.5 mm wide', () => {
     let total = 0;
-    for (const t of BRIEF_PUNCTUATION) {
+    test.each(BRIEF_PUNCTUATION.map((t) => [t]))('%s', (t) => {
       for (const [name, font] of FONTS) {
         for (const sp of SPACINGS) {
           const blk = buildBlock(t, font, 12, sp, 2);
@@ -227,9 +227,9 @@ describe('buildBlock', () => {
           expect(thinArea(union([blk.letters, blk.plinth]), BRIDGE_MM), `${t} ${name} ${sp}`).toBeLessThan(0.05);
         }
       }
-    }
-    expect(total).toBeGreaterThan(10);
-  }, 60_000); // 81 openings of a whole line take about 10 s
+    }, 60_000);
+    test('bridges were exercised', () => expect(total).toBeGreaterThan(10));
+  });
 
   test('slots narrower than 1 mm are filled; no hole left vanishes at -0.5 mm', () => {
     for (const t of PUNCTUATION) {

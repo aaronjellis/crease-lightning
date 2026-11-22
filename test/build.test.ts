@@ -75,33 +75,30 @@ describe('build', () => {
   });
 
   describe('matrix: theme × size × spine × lines × font (R15)', () => {
-    const cases: [string, Params][] = [];
+    // One test per theme and size, so no single test blocks the worker for long.
     for (const theme of THEMES) {
       const base = applyTheme(P0, theme, BIRTHDAY_DEFAULTS);
       const variants = [...new Set([`${base.line1}|${base.line2}`, `${base.line1}|`, `${base.line1}|ALEXANDRA`])];
       for (const size of Object.keys(CARD_SIZES) as CardSize[]) {
-        for (const spine of ['long', 'short'] as const) {
-          for (const v of variants) {
-            // R15: every theme with its own font; all three bundled fonts only for Birthday and Blank.
-            for (const font of theme.id === 'birthday' || theme.id === 'blank' ? FONTS : [base.font]) {
-              const [line1, line2] = v.split('|');
-              cases.push([`${theme.id} ${size} ${spine} "${line1}" / "${line2}" ${font}`, { ...withSize(base, size), spine, line1, line2, font }]);
+        test(`${theme.id} ${size}: every combination folds and cuts cleanly with no fixes`, () => {
+          const bad: string[] = [];
+          for (const spine of ['long', 'short'] as const) {
+            for (const v of variants) {
+              // R15: every theme with its own font; all three bundled fonts only for Birthday and Blank.
+              for (const font of theme.id === 'birthday' || theme.id === 'blank' ? FONTS : [base.font]) {
+                const [line1, line2] = v.split('|');
+                const label = `${theme.id} ${size} ${spine} "${line1}" / "${line2}" ${font}`;
+                const card = build({ ...withSize(base, size), spine, line1, line2, font }, assets, 'blade', { strokeCheck: false });
+                const failed = card.checks.filter((c) => !c.ok).map((c) => `${c.id} (${c.detail})`);
+                if (failed.length || card.fixes.length || !card.exportable) {
+                  bad.push(`${label}: checks [${failed.join('; ')}] fixes [${card.fixes.map((f) => f.id).join(', ')}]`);
+                }
+              }
             }
           }
-        }
+          expect(bad).toEqual([]);
+        }, 60_000);
       }
     }
-
-    test('every combination folds and cuts cleanly with no fixes', () => {
-      const bad: string[] = [];
-      for (const [label, p] of cases) {
-        const card = build(p, assets, 'blade', { strokeCheck: false });
-        const failed = card.checks.filter((c) => !c.ok).map((c) => `${c.id} (${c.detail})`);
-        if (failed.length || card.fixes.length || !card.exportable) {
-          bad.push(`${label}: checks [${failed.join('; ')}] fixes [${card.fixes.map((f) => f.id).join(', ')}]`);
-        }
-      }
-      expect(bad).toEqual([]);
-    }, 600_000);
   });
 });

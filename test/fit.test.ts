@@ -95,40 +95,36 @@ describe('fitLayout', () => {
     }
   });
 
-  test(
-    'every step obeys the spec constraints',
-    () => {
-      const sizes = Object.keys(CARD_SIZES) as CardSize[];
+  // One test per theme, so no single test blocks the worker for long.
+  describe.each(THEMES.map((t) => [t.id, t] as const))('every step obeys the spec constraints: %s', (_id, theme) => {
+    test('all sizes, spines, line counts and fonts', () => {
       const families = ['Alfa Slab One', 'Arvo', 'Rokkitt'];
       let n = 0;
-      for (const theme of THEMES) {
-        for (const size of sizes) {
-          for (const spine of ['long', 'short'] as const) {
-            for (const lines of [1, 2]) {
-              for (const font of families) {
-                const p = base({
-                  theme: theme.id,
-                  size,
-                  spine,
-                  font,
-                  line1: theme.lines[0],
-                  line2: lines === 2 ? theme.lines[1] || 'ALEXANDRA' : '',
-                });
-                // The stroke check has its own test; skipping it here keeps the matrix fast.
-                const l = fitLayout(p, fonts, theme, 'blade', { strokeCheck: false });
-                expectConstraints(l, p, `${theme.id} ${size} ${spine} ${lines} ${font}`);
-                // Hidden accents are a note, not a fix (R10), so every default builds with zero fixes.
-                expect(l.fixes, `${theme.id} ${size} ${spine} ${lines} ${font}`).toEqual([]);
-                n++;
-              }
+      for (const size of Object.keys(CARD_SIZES) as CardSize[]) {
+        for (const spine of ['long', 'short'] as const) {
+          for (const lines of [1, 2]) {
+            for (const font of families) {
+              const p = base({
+                theme: theme.id,
+                size,
+                spine,
+                font,
+                line1: theme.lines[0],
+                line2: lines === 2 ? theme.lines[1] || 'ALEXANDRA' : '',
+              });
+              // The stroke check has its own test; skipping it here keeps the matrix fast.
+              const l = fitLayout(p, fonts, theme, 'blade', { strokeCheck: false });
+              expectConstraints(l, p, `${theme.id} ${size} ${spine} ${lines} ${font}`);
+              // Hidden accents are a note, not a fix (R10), so every default builds with zero fixes.
+              expect(l.fixes, `${theme.id} ${size} ${spine} ${lines} ${font}`).toEqual([]);
+              n++;
             }
           }
         }
       }
-      expect(n).toBe(THEMES.length * 4 * 2 * 2 * 3);
-    },
-    120_000
-  );
+      expect(n).toBe(4 * 2 * 2 * 3);
+    }, 60_000);
+  });
 
   test('auto-split happens below 9 mm when a space exists', () => {
     const long = 'HAPPY BIRTHDAY TO YOU SAM';
