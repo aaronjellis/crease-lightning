@@ -14,22 +14,38 @@ import { perforate } from './perforate';
 import type { Target } from './targets';
 
 const LETTER = { w: 215.9, h: 279.4 };
+const TABLOID = { w: 279.4, h: 431.8 };
 const A4 = { w: 210, h: 297 };
 const A3 = { w: 297, h: 420 };
+const A2 = { w: 420, h: 594 };
+/** Paper by size, smallest first (R19: Letter for 5x7 and A2, A4 for A6, A3 for A5). */
+const PAPER: Record<Params['size'], { w: number; h: number }[]> = {
+  '5x7': [LETTER, TABLOID, A3, A2],
+  a2: [LETTER, TABLOID, A3, A2],
+  a6: [A4, A3, A2],
+  a5: [A3, A2],
+};
 const CHECK_MM = 50;
-const MARGIN = 8;
+export const MARGIN = 8;
 /** Space kept clear at the top of each page for the title and legend. */
-const HEADER_MM = 17;
+export const HEADER_MM = 17;
 
 export interface Page {
   w: number;
   h: number;
 }
 
-/** Letter for 5x7 and A2, A4 for A6, A3 for A5; landscape when the piece is wider than tall. */
+/**
+ * The R19 paper for the size, landscape when the piece is wider than tall. When the piece does not
+ * fit with the margins and header clear (short-spine cards are twice as wide as they are tall),
+ * the next paper up is used rather than clamping.
+ */
 export function pageFor(size: Params['size'], widthMm: number, heightMm: number): Page {
-  const base = size === 'a6' ? A4 : size === 'a5' ? A3 : LETTER;
-  return widthMm > heightMm ? { w: base.h, h: base.w } : base;
+  const land = widthMm > heightMm;
+  const orient = (b: { w: number; h: number }): Page => (land ? { w: b.h, h: b.w } : b);
+  const papers = PAPER[size];
+  const page = papers.map(orient).find((q) => widthMm + 2 * MARGIN <= q.w && heightMm + HEADER_MM + MARGIN <= q.h);
+  return page ?? orient(papers[papers.length - 1]);
 }
 
 /** A flat point on the page: 1 mm = 1 mm, centred (nudged down to clear the header when tight), y flipped. */
@@ -117,8 +133,7 @@ export function printPdf(card: Card): Uint8Array {
 const plain = (s: string, name: string) => s.replace(/`/g, '').replace(/<name>/g, name);
 
 /** Page 1: the target's steps, then the folding steps. Optional PNGs (by fold step id) add one page each. */
-export function howToPdf(card: Card, target: Target, images: { step: string; png: Uint8Array }[] = []): Uint8Array {
-  const name = slugName(card.params.line1);
+export function howToPdf(card: Card, target: Target, images: { step: string; png: Uint8Array }[] = [], name: string = slugName(card.params.line1)): Uint8Array {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const left = 20;
   const width = 170;

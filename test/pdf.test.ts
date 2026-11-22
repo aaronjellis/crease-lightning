@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { build, type Card } from '../src/core/build';
 import { FOLD_STEPS } from '../src/core/foldSteps';
 import { defaultParams } from '../src/core/model';
-import { howToPdf, mapPoint, pageFor, printPdf } from '../src/export/pdf';
+import { CARD_SIZES, type CardSize } from '../src/core/model';
+import { HEADER_MM, MARGIN, howToPdf, mapPoint, pageFor, printPdf } from '../src/export/pdf';
 import { TARGETS } from '../src/export/targets';
 import { testFonts } from './helpers/fonts';
 
@@ -36,10 +37,13 @@ describe('printPdf', () => {
     });
   });
   test('paper by size, landscape when wider than tall', () => {
-    expect(pageFor('5x7', 500, 100)).toMatchObject({ w: 279.4, h: 215.9 });
-    expect(pageFor('a2', 100, 500)).toMatchObject({ w: 215.9, h: 279.4 });
+    expect(pageFor('5x7', 254, 178)).toMatchObject({ w: 279.4, h: 215.9 });
+    expect(pageFor('a2', 100, 200)).toMatchObject({ w: 215.9, h: 279.4 });
     expect(pageFor('a6', 100, 200)).toMatchObject({ w: 210, h: 297 });
-    expect(pageFor('a5', 300, 200)).toMatchObject({ w: 420, h: 297 });
+    expect(pageFor('a5', 296, 210)).toMatchObject({ w: 420, h: 297 });
+    // Short-spine cards are too wide for the usual paper, so the next one up is used.
+    expect(pageFor('5x7', 356, 127)).toMatchObject({ w: 431.8, h: 279.4 });
+    expect(pageFor('a5', 420, 148)).toMatchObject({ w: 594, h: 420 });
   });
   test('maps flat points 1:1, centred, y flipped like the SVG', () => {
     const page = pageFor('5x7', 254, 178);
@@ -53,6 +57,30 @@ describe('printPdf', () => {
     expect((lo.x + hi.x) / 2).toBeCloseTo(page.w / 2);
     expect((lo.y + hi.y) / 2).toBeCloseTo(page.h / 2);
   });
+});
+
+describe('every size fits its paper', () => {
+  const OVERHANG_MAX = 6;
+  for (const size of Object.keys(CARD_SIZES) as CardSize[]) {
+    for (const spine of ['long', 'short'] as const) {
+      test(`${size} ${spine} spine: inner and jacket sit inside the page below the header`, () => {
+        const { closedW, closedL } = CARD_SIZES[size];
+        const [W, L] = spine === 'long' ? [closedW, closedL] : [closedL, closedW];
+        for (const piece of [
+          { widthMm: 2 * W, heightMm: L },
+          { widthMm: 2 * W + 2 * OVERHANG_MAX, heightMm: L + 2 * OVERHANG_MAX },
+        ]) {
+          const page = pageFor(size, piece.widthMm, piece.heightMm);
+          const lo = mapPoint(piece, page, { x: 0, y: 0 });
+          const hi = mapPoint(piece, page, { x: piece.widthMm, y: piece.heightMm });
+          expect(lo.x).toBeGreaterThanOrEqual(MARGIN - 1e-6);
+          expect(hi.x).toBeLessThanOrEqual(page.w - MARGIN + 1e-6);
+          expect(hi.y).toBeGreaterThanOrEqual(HEADER_MM - 1e-6);
+          expect(lo.y).toBeLessThanOrEqual(page.h - MARGIN + 1e-6);
+        }
+      });
+    }
+  }
 });
 
 describe('howToPdf', () => {

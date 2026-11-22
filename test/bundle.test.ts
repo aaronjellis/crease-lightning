@@ -39,6 +39,23 @@ describe('exportBundle', () => {
   });
 });
 
+describe('file names in the steps', () => {
+  test('every file a step mentions is in the zip, whatever line 1 says', async () => {
+    for (const t of Object.values(TARGETS)) {
+      const { blob } = exportBundle(card, t, { name: 'Mary Kate!' });
+      const files = Object.keys(unzipSync(new Uint8Array(await blob.arrayBuffer())));
+      for (const step of t.steps) {
+        for (const m of step.matchAll(/`<name>([^`]+)`/g)) expect(files, `${t.id}: ${step}`).toContain(`mary-kate${m[1]}`);
+      }
+    }
+  });
+  test('an empty name falls back to the default', async () => {
+    const { blob, filename } = exportBundle(card, TARGETS.print, { name: '' });
+    expect(filename).toBe('crease-lightning-card-print.zip');
+    expect(Object.keys(unzipSync(new Uint8Array(await blob.arrayBuffer())))).toContain('crease-lightning-card-print.pdf');
+  });
+});
+
 describe('slugName', () => {
   test('slugs line 1', () => {
     expect(slugName('Happy Birthday, Mary-Kate!')).toBe('happy-birthday-mary-kate');
