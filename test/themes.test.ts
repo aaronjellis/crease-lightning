@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { bounds, intersect, outerCount, scale, union, type Poly } from '@kerfuffle/engine/geom';
+import { area, bounds, intersect, offset, outerCount, scale, union, type Poly } from '@kerfuffle/engine/geom';
 import { BIRTHDAY_DEFAULTS, type ThemeDefaults } from '../src/core/model';
 import { MIN_STROKE_BLADE_MM, PLINTH_MIN_MM } from '../src/core/constants';
 import { buildIconBlock, thinArea } from '../src/core/text';
@@ -12,7 +12,7 @@ const atMin = (id: string): Poly => {
 };
 
 describe('icons', () => {
-  test.each(ICONS.map((i) => i.id))('%s is one piece, 1 mm tall, bottom on y = 0', (id) => {
+  test.each(ICONS.map((i) => i.id))('%s is one piece at any size, 1 mm tall, bottom on y = 0', (id) => {
     const i = iconById(id);
     const b = bounds(i.poly)!;
     expect(b.h).toBeCloseTo(1, 3);
@@ -25,6 +25,11 @@ describe('icons', () => {
 
   test.each(ICONS.map((i) => i.id))('%s has no stroke under 1.5 mm at its minimum height', (id) => {
     expect(thinArea(atMin(id), MIN_STROKE_BLADE_MM)).toBeLessThan(0.05);
+  });
+
+  test.each(ICONS.map((i) => i.id))('%s has no hole narrower than 1 mm at its minimum height', (id) => {
+    const holes = atMin(id).filter((c) => !outerCount([c]));
+    for (const h of holes) expect(area(offset([[...h].reverse()], -0.5, 0.05))).toBeGreaterThan(1e-6);
   });
 
   test.each(ICONS.map((i) => i.id))('%s welds to a plinth into one piece', (id) => {

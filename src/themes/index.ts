@@ -12,12 +12,13 @@ export type { Icon, Motif, SlotId, Theme } from './types';
 export { loadIcon } from './icon';
 
 const MATERIAL = 'https://github.com/marella/material-symbols (Material Symbols, weight 700, rounded, filled)';
-const ORIGINAL = 'Original artwork for Crease Lightning';
+const ORIGINAL = 'Original artwork for this project';
+const ORIGINAL_LICENCE = 'Original work © 2026 Aaron Ellis, distributed with Crease Lightning';
 
 export const ICONS: Icon[] = [
-  loadIcon(balloonSvg, { id: 'balloon', minHeightMm: 18, source: ORIGINAL, licence: 'Original work' }),
+  loadIcon(balloonSvg, { id: 'balloon', minHeightMm: 18, source: ORIGINAL, licence: ORIGINAL_LICENCE }),
   loadIcon(cakeSvg, { id: 'cake', minHeightMm: 18, source: `${MATERIAL}: cake`, licence: 'Apache-2.0' }),
-  loadIcon(confettiSvg, { id: 'confetti', minHeightMm: 9, source: ORIGINAL, licence: 'Original work' }),
+  loadIcon(confettiSvg, { id: 'confetti', minHeightMm: 9, source: ORIGINAL, licence: ORIGINAL_LICENCE }),
   loadIcon(starSvg, { id: 'star', minHeightMm: 9, source: `${MATERIAL}: star`, licence: 'Apache-2.0' }),
 ];
 
