@@ -31,8 +31,17 @@ export interface BuildState {
 export interface Ctx {
   host: Host;
   params(): Params;
-  /** Change the design. `typing` waits 150 ms of quiet before rebuilding. */
-  update(next: Params, opts?: { typing?: boolean }): void;
+  /** Change the design. `typing` waits 150 ms of quiet before rebuilding; `undoable` stashes the decor it replaces for `decorUndo`. */
+  update(next: Params, opts?: { typing?: boolean; undoable?: boolean }): void;
+  /** The selected decoration's id, or null (also null once that item is gone). */
+  selection(): string | null;
+  select(id: string | null): void;
+  /**
+   * Restores the decor from before the last theme change or style pick; a no-op without one. The stash
+   * lives in the app (not the params or the share link) and clears on any other decor change.
+   */
+  decorUndo(): void;
+  canDecorUndo(): boolean;
   fonts: FontLoader;
 }
 

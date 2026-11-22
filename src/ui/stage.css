@@ -115,7 +115,8 @@
 .swatch-hole { width: 14px; height: 14px; border-radius: 4px; background: var(--show-through, var(--brand-a)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15); }
 
 /* ------------------------------------------------------------ export modal */
-.export-modal {
+.export-modal,
+.decor-add {
   width: min(640px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   padding: 0;
@@ -125,7 +126,8 @@
   color: var(--ink);
   box-shadow: 0 24px 64px rgb(28 26 23 / 0.28);
 }
-.export-modal::backdrop { background: rgb(28 26 23 / 0.45); backdrop-filter: blur(2px); }
+.export-modal::backdrop,
+.decor-add::backdrop { background: rgb(28 26 23 / 0.45); backdrop-filter: blur(2px); }
 .modal-body { display: grid; gap: 16px; padding: 22px 24px 24px; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; }
 .modal-head h2 { font: 700 22px/1.2 var(--display); }

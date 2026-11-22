@@ -2,25 +2,17 @@
  * The theme rail: a tile per theme (jacket colour with its first style's first icon, drawn instantly
  * from the icon data), and Surprise me.
  */
-import { polyToSvgPath } from '@kerfuffle/engine/geom';
 import { applyTheme } from '../core/model';
-import { iconById, themeById, THEMES, type Theme } from '../themes';
+import { themeById, THEMES, type Theme } from '../themes';
 import type { Ctx, View } from './context';
-import { h, svgFrom } from './dom';
+import { h } from './dom';
+import { iconThumb } from './iconThumb';
 import { ACTIONS, THEMES_HEADING } from './strings';
-
-/** The icon as an SVG: its poly is 1 mm tall with y up, so flip it into SVG's y-down box. */
-function iconSvg(id: string): string {
-  const icon = iconById(id);
-  const w = Math.max(...icon.poly.flat().map((p) => p.x));
-  const flipped = icon.poly.map((c) => c.map((p) => ({ x: p.x, y: 1 - p.y })));
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w.toFixed(3)} 1" aria-hidden="true" focusable="false"><path fill-rule="nonzero" d="${polyToSvgPath(flipped, 4)}"/></svg>`;
-}
 
 function thumb(t: Theme): HTMLElement {
   const first = t.styles[0]?.items[0]?.icon;
   const art = first
-    ? svgFrom(iconSvg(first))
+    ? iconThumb(first)
     : h('span', { class: 'thumb-letter', 'aria-hidden': 'true', text: t.lines[0].charAt(0) });
   return h('span', { class: 'thumb', style: `--thumb-bg:${t.colours.jacket};--thumb-fg:${t.colours.inner}` }, art);
 }
@@ -28,7 +20,7 @@ function thumb(t: Theme): HTMLElement {
 export function themeRail(ctx: Ctx): View {
   const pick = (t: Theme) => {
     const p = ctx.params();
-    if (p.theme !== t.id) ctx.update(applyTheme(p, t, themeById(p.theme)));
+    if (p.theme !== t.id) ctx.update(applyTheme(p, t, themeById(p.theme)), { undoable: true });
   };
   const tiles = THEMES.map((t) => {
     const b = h('button', { type: 'button', class: 'theme-tile', 'aria-pressed': 'false', 'data-ph-capture-attribute-theme': t.id }, thumb(t), h('span', { class: 'theme-name', text: t.name }));

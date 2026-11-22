@@ -93,9 +93,15 @@ export const SPACING: Record<Spacing, string> = { tight: 'Tight', normal: 'Norma
 
 export const DECORATIONS = {
   title: 'Decorations',
-  motifs: 'Cut-out shapes',
-  motifsHint: 'Small shapes cut into the pages.',
-  none: (theme: string) => `The ${theme} theme has no decorations.`,
+  style: 'Style', none: 'None', custom: (name: string) => `${name} (custom)`,
+  border: 'Border', borderPattern: 'Pattern',
+  items: 'Illustrations', add: 'Add', addTitle: 'Add an illustration',
+  shuffle: 'Shuffle', unpinAll: 'Unpin all', undo: 'Undo',
+  size: 'Size', remove: (name: string) => `Remove ${name}`,
+  empty: 'No illustrations. Add one, or pick a style.',
+  find: 'Find',
+  everyday: 'Everyday',
+  noMatch: 'No illustrations match.',
 };
 
 export const CHECKS = {

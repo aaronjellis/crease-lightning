@@ -12,6 +12,7 @@ import './app.css';
 import { EMPTY_MESSAGE_NOTE, type Card } from '../core/build';
 import { decodeLink } from '../core/codec';
 import { loadFont as realLoadFont, type LoadedFont } from '../core/fonts';
+import type { Decor } from '../core/decor/types';
 import { defaultParams, type Params } from '../core/model';
 import { mainThreadBuilder, moduleWorkersSupported, workerBuilder, type Builder } from './builder';
 import { takeLinkFragment } from './linkFragment';
@@ -132,6 +133,11 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   let requestSeq = 0;
   let shownSeq = 0;
 
+  /** The selected decoration; Flat view editing and the chips share it. */
+  let selected: string | null = null;
+  /** The decor from before the last theme change or style pick, for Undo; not in params or the link. */
+  let decorStash: Decor | null = null;
+
   // ---------------------------------------------------------------- notices
   const bannerText = h('p', { class: 'banner-text' });
   const bannerClose = h('button', { type: 'button', class: 'ghost icon-button', 'aria-label': DISMISS }, '×');
@@ -147,7 +153,23 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   bannerClose.addEventListener('click', () => (banner.hidden = true));
 
   // ---------------------------------------------------------------- parts
-  const ctx: Ctx = { host, params: () => params, update: (next, opts = {}) => update(next, opts.typing ?? false), fonts };
+  const ctx: Ctx = {
+    host,
+    params: () => params,
+    update: (next, opts = {}) => update(next, opts.typing ?? false, opts.undoable ?? false),
+    selection: () => (selected !== null && params.decor.items.some((i) => i.id === selected) ? selected : null),
+    select(id) {
+      if (id === selected) return;
+      selected = id;
+      renderAll();
+    },
+    decorUndo() {
+      const restore = decorStash;
+      if (restore) update({ ...params, decor: restore }, false, false);
+    },
+    canDecorUndo: () => decorStash !== null,
+    fonts,
+  };
   const rail = themeRail(ctx);
   const cards = [messageCard(ctx), cardCard(ctx), fontCard(ctx), decorationsCard(ctx), checksCard(ctx), advancedCard(ctx)];
   const views: View[] = [rail, ...cards];
@@ -241,8 +263,9 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
     renderAll();
   }
 
-  function update(next: Params, typing: boolean) {
+  function update(next: Params, typing: boolean, undoable = false) {
     if (destroyed) return;
+    if (next.decor !== params.decor && JSON.stringify(next.decor) !== JSON.stringify(params.decor)) decorStash = undoable ? params.decor : null;
     params = next;
     version++;
     clearTimeout(strokeTimer);

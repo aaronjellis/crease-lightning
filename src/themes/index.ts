@@ -204,6 +204,13 @@ export function themeById(id: ThemeId): Theme {
   return t;
 }
 
+/** The icon's source SVG (a 256-unit box, filled with currentColor): cheap to draw, unlike `Icon.poly`. */
+export function iconSvgSource(id: string): string {
+  const svg = SVGS[`./icons/${id}.svg`];
+  if (!svg) throw new Error(`Unknown icon "${id}".`);
+  return svg;
+}
+
 export function iconById(id: string): Icon {
   const i = ICONS.find((x) => x.id === id);
   if (!i) throw new Error(`Unknown icon "${id}".`);
