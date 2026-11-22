@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { area, bounds, intersect, offset, outerCount, scale, union, type Poly, type Pt } from '@kerfuffle/engine/geom';
-import { BIRTHDAY_DEFAULTS, type ThemeDefaults } from '../src/core/model';
+import { applyTheme, BIRTHDAY_DEFAULTS, defaultParams, type ThemeDefaults, type ThemeId } from '../src/core/model';
+import { fitLayout } from '../src/core/fit';
+import { testFonts } from './helpers/fonts';
 import { MIN_STROKE_BLADE_MM, PLINTH_MIN_MM } from '../src/core/constants';
 import { buildIconBlock, thinArea } from '../src/core/text';
 import { ICONS, THEMES, iconById, loadIcon, themeById } from '../src/themes';
@@ -66,7 +68,7 @@ describe('icons', () => {
 
   test('unknown ids throw', () => {
     expect(() => iconById('nope')).toThrow();
-    expect(() => themeById('wedding')).toThrow();
+    expect(() => themeById('nope' as ThemeId)).toThrow();
   });
 });
 
@@ -83,10 +85,16 @@ describe('themes', () => {
     }
   });
 
+  test('motif icons have no holes: an island inside a cut-through would fall out of the page', () => {
+    for (const id of new Set(THEMES.flatMap((t) => t.motifs.map((m) => m.icon)))) {
+      expect(iconById(id).poly.filter((c) => !outerCount([c])), id).toEqual([]);
+    }
+  });
+
   test('Birthday', () => {
     const t = themeById('birthday');
     expect(t.lines).toEqual(['HAPPY BIRTHDAY', 'SAM']);
-    expect(t.font).toBe('Rokkitt');
+    expect(t.font).toBe('Arvo');
     expect(t.accents).toEqual(['balloon', 'cake']);
     expect(t.motifs.length).toBeGreaterThan(0);
   });
@@ -105,5 +113,59 @@ describe('themes', () => {
     expect(defaults.length).toBe(THEMES.length);
     const b = themeById('birthday');
     expect(BIRTHDAY_DEFAULTS).toEqual({ id: b.id, lines: b.lines, font: b.font, colours: b.colours });
+  });
+});
+
+describe('launch themes', () => {
+  const EXPECTED: Record<string, { lines: [string, string]; jacket: string; inner?: string }> = {
+    birthday: { lines: ['HAPPY BIRTHDAY', 'SAM'], jacket: '#e8453c' },
+    anniversary: { lines: ['HAPPY ANNIVERSARY', 'ALEX & SAM'], jacket: '#8c2f39' },
+    wedding: { lines: ['JUST MARRIED', 'ALEX & SAM'], jacket: '#7d9a86' },
+    graduation: { lines: ['CONGRATS GRAD', 'CLASS OF 2027'], jacket: '#1f3a5f' },
+    'baby-girl': { lines: ['WELCOME', 'BABY GIRL'], jacket: '#f4a6c0', inner: '#ffffff' },
+    'baby-boy': { lines: ['WELCOME', 'BABY BOY'], jacket: '#8fc1e8', inner: '#ffffff' },
+    christmas: { lines: ['MERRY CHRISTMAS', 'LOVE, SAM'], jacket: '#c8102e', inner: '#ffffff' },
+    'new-year': { lines: ['HAPPY NEW YEAR', '2027'], jacket: '#1b2a49' },
+    'thank-you': { lines: ['THANK YOU', 'SO MUCH'], jacket: '#2a9d8f' },
+    love: { lines: ['LOVE YOU', 'ALWAYS'], jacket: '#c2185b' },
+  };
+
+  test('there are ten themed cards plus Blank, each with two accents and two or three motif kinds', () => {
+    expect(THEMES.map((t) => t.id).sort()).toEqual([...Object.keys(EXPECTED), 'blank'].sort());
+    for (const t of THEMES.filter((x) => x.id !== 'blank')) {
+      expect(t.accents.length, t.id).toBe(2);
+      const kinds = new Set(t.motifs.map((m) => m.icon)).size;
+      expect(kinds, t.id).toBeGreaterThanOrEqual(2);
+      expect(kinds, t.id).toBeLessThanOrEqual(3);
+    }
+  });
+
+  test.each(Object.entries(EXPECTED))('%s has its default lines and colours', (id, e) => {
+    const t = themeById(id as ThemeId);
+    expect(t.lines).toEqual(e.lines);
+    expect(t.colours.jacket).toBe(e.jacket);
+    expect(t.colours.inner).toMatch(/^#[0-9a-f]{6}$/);
+    if (e.inner) expect(t.colours.inner).toBe(e.inner);
+  });
+
+  // Ruling R11: the default font is the bundled one with the tallest line 1 on a 5 x 7 long-spine card.
+  const fonts = testFonts();
+  const capOf = (t: (typeof THEMES)[number], font: string): number => {
+    const p = { ...applyTheme(defaultParams('en-US'), t, BIRTHDAY_DEFAULTS), font };
+    return fitLayout(p, fonts, t, 'blade', { strokeCheck: false }).blocks.l1.capMm;
+  };
+  test.each(THEMES.filter((t) => t.lines[0]).map((t) => t.id))('%s default font gives the largest line 1 on a 5 x 7 card', (id) => {
+    const t = themeById(id);
+    const caps = Object.fromEntries(['Alfa Slab One', 'Arvo', 'Rokkitt'].map((f) => [f, capOf(t, f)]));
+    for (const [f, cap] of Object.entries(caps)) expect(caps[t.font], `${t.font} vs ${f}`).toBeGreaterThanOrEqual(cap - 0.05);
+  });
+
+  test.each(THEMES.filter((t) => t.accents.length).map((t) => t.id))('%s shows both accents on a 5 x 7 card with its default lines', (id) => {
+    const t = themeById(id);
+    const p = applyTheme(defaultParams('en-US'), t, BIRTHDAY_DEFAULTS);
+    const layout = fitLayout(p, fonts, t, 'blade', { strokeCheck: false });
+    expect(Object.keys(layout.blocks)).toEqual(expect.arrayContaining(['a1', 'a2']));
+    expect(layout.notes.map((n) => n.message).join()).not.toContain('left out');
+    expect(layout.fixes).toEqual([]);
   });
 });

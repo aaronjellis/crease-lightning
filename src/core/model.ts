@@ -64,7 +64,7 @@ export interface ThemeDefaults {
 export const BIRTHDAY_DEFAULTS: ThemeDefaults = {
   id: 'birthday',
   lines: ['HAPPY BIRTHDAY', 'SAM'],
-  font: 'Rokkitt',
+  font: 'Arvo',
   colours: { inner: '#ffffff', jacket: '#e8453c' },
 };
 

@@ -14,7 +14,8 @@ const EPS = 1e-6;
 const fonts = testFonts();
 const birthday = themeById('birthday');
 const blank = themeById('blank');
-const base = (over: Partial<Params> = {}): Params => ({ ...defaultParams('en-US'), ...over });
+// These tests were tuned for Rokkitt, Birthday's former default font.
+const base = (over: Partial<Params> = {}): Params => ({ ...defaultParams('en-US'), font: 'Rokkitt', ...over });
 const withAdvanced = (p: Params, adv: Partial<Params['advanced']>): Params => ({ ...p, advanced: { ...p.advanced, ...adv } });
 const step = (l: Layout, id: string) => l.steps.find((s) => s.id === id);
 const fixIds = (l: Layout) => l.fixes.map((f) => f.id);

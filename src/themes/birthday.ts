@@ -4,7 +4,7 @@ export const birthday: Theme = {
   id: 'birthday',
   name: 'Birthday',
   lines: ['HAPPY BIRTHDAY', 'SAM'],
-  font: 'Rokkitt',
+  font: 'Arvo',
   colours: { inner: '#ffffff', jacket: '#e8453c' },
   accents: ['balloon', 'cake'],
   motifs: [
