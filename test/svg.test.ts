@@ -114,7 +114,7 @@ describe('colours', () => {
   });
   test('cricut uses the paper colours', () => {
     const { cut, score } = paperColours(card, 'inner');
-    expect(cut).toBe('#ffffff');
+    expect(cut).toBe('#c8c8c8'); // R16: near-white paper cuts in light grey
     expect(score).toBe('#a6a6a6');
     expect([...strokes(svgFor('cricut'))].sort()).toEqual([cut, score].sort());
     const j = paperColours(card, 'jacket');

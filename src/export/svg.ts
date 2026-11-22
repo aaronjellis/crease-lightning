@@ -26,6 +26,7 @@ export interface Colours {
 }
 
 const GAP_MM = 10;
+const NEAR_WHITE_CUT = '#c8c8c8';
 const STROKE_MM = 0.1;
 const NS = 'xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"';
 
@@ -60,11 +61,12 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${to(r)}${to(g)}${to(b)}`;
 }
 
-/** The paper colour for cut, and that colour with its HSL lightness reduced by 35% (L x 0.65) for score. */
+/** The paper colour for cut (light grey when its HSL lightness exceeds 0.9), and that colour with its HSL lightness reduced by 35% (L x 0.65) for score. */
 export function paperColours(card: Card, piece: 'inner' | 'jacket'): Colours {
-  const cut = card.params.colours[piece].toLowerCase();
-  const [h, s, l] = hexToHsl(cut);
-  return { cut, score: hslToHex(h, s, l * 0.65) };
+  const paper = card.params.colours[piece].toLowerCase();
+  const [h, s, l] = hexToHsl(paper);
+  // Near-white strokes are invisible in Design Space, so those papers cut in light grey (R16).
+  return { cut: l > 0.9 ? NEAR_WHITE_CUT : paper, score: hslToHex(h, s, l * 0.65) };
 }
 
 /** The stroke colours for a piece on a target: paper colours, or the two Atomm laser colours. */
