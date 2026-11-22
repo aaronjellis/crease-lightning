@@ -51,7 +51,7 @@ export function checksCard(ctx: Ctx): View {
       ...card.checks.map((c) => {
         const pending = c.id === 'stroke' && !state.strokeChecked && c.ok;
         const warn = c.id === 'stroke' && !c.ok;
-        const text = pending ? CHECKS.pending : c.ok ? CHECK_NAMES[c.id].ok : CHECK_NAMES[c.id].fail;
+        const text = pending ? (state.strokeSkipped ? CHECKS.notRun : CHECKS.pending) : c.ok ? CHECK_NAMES[c.id].ok : CHECK_NAMES[c.id].fail;
         const kind = pending ? 'is-pending' : c.ok ? 'is-ok' : warn ? 'is-warn' : 'is-fail';
         return h(
           'li',

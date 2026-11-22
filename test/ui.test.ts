@@ -89,6 +89,18 @@ describe('mountApp', () => {
     }
   });
 
+  test('a colour change repaints without rebuilding the geometry (I1)', async () => {
+    const a = await mount();
+    const before = a.getCard();
+    a.setParams({ ...a.getParams(), colours: { inner: '#123456', jacket: '#abcdef' } });
+    await a.whenIdle();
+    const after = a.getCard();
+    expect(after.params).toBe(a.getParams());
+    expect(after.params.colours).toEqual({ inner: '#123456', jacket: '#abcdef' });
+    expect(after.layout).toBe(before.layout);
+    expect(after.inner).toBe(before.inner);
+  });
+
   test('the size tiles show four sizes, each labelled in mm and inches', async () => {
     await mount();
     const tiles = [...root.querySelectorAll('[data-ph-capture-attribute-size]')];

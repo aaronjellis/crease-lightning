@@ -134,8 +134,14 @@ export function createCanvas(createScene: (canvas: HTMLCanvasElement) => SceneLi
   return {
     el,
     show(next, geometry) {
+      const prev = card;
       card = next;
       if (geometry) scene.setCard(next);
+      else if (prev && prev.params.colours !== next.params.colours && JSON.stringify(prev.params.colours) !== JSON.stringify(next.params.colours)) {
+        // Only the paint changed (no rebuild): recolour the scene.
+        if (scene.setColours) scene.setColours(next.params.colours);
+        else scene.setCard(next);
+      }
       flatDirty = true;
       if (tab === 'flat') {
         flat.render(next);

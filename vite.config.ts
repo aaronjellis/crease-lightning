@@ -34,6 +34,8 @@ export default defineConfig(({ mode }) => {
       target: 'es2022',
       ...(atomm ? { outDir: '../dist-atomm', emptyOutDir: true, rollupOptions: { input: 'entries/atomm.html' } } : {}),
     },
+    // The build worker (R30) loads HarfBuzz, which needs a top-level await: ES module workers only.
+    worker: { format: 'es' as const },
     // Pre-bundling would move HarfBuzz away from the .wasm file it loads beside itself.
     optimizeDeps: { exclude: ['harfbuzzjs'] },
     // Kerfuffle's own tests run in Kerfuffle; these are the generator's.

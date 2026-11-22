@@ -109,6 +109,7 @@ export const CHECKS = {
   restoreLabel: 'Restore the fix you undid',
   undoneFix: (id: string) => `You undid fix ${id}.`,
   pending: 'Checking stroke widths…',
+  notRun: "Stroke widths weren't checked. Change the card to try again.",
   ready: 'Ready to export.',
   readyWithWarning: 'Ready to export, but some strokes may tear.',
   notReady: 'Not ready to export yet.',

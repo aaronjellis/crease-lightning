@@ -93,6 +93,23 @@ const capFromHeight = (m: Metrics, sMax: number): number =>
   m.topPerCap > 0 ? Math.min((sMax - PLINTH_MIN_MM) / m.topPerCap, sMax / (m.descPerCap + m.topPerCap)) : Infinity;
 
 
+/**
+ * Each block's stroke verdict per minimum stroke. Blocks are cached across builds (`buildBlock`), so
+ * the idle stroke rebuild after a preview pays only for lines it hasn't checked yet.
+ */
+const strokeCache = new WeakMap<Block, Map<number, boolean>>();
+
+function isThin(block: Block, minStroke: number): boolean {
+  let byMin = strokeCache.get(block);
+  if (!byMin) strokeCache.set(block, (byMin = new Map()));
+  let thin = byMin.get(minStroke);
+  if (thin === undefined) {
+    thin = thinArea(union([block.letters, block.plinth]), minStroke, { stopAbove: THIN_AREA_MM2 }) > THIN_AREA_MM2;
+    byMin.set(minStroke, thin);
+  }
+  return thin;
+}
+
 /** Where a block's window starts along the spine: every window is centred on its strip. */
 export function windowY0(step: StepSpec, block: Block): number {
   return (step.y0 + step.y1) / 2 - (bounds(block.window)?.w ?? 0) / 2;
@@ -419,10 +436,7 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
   else if (caps.some((x) => x < WARN_CAP_MM)) notes.push(smallNote('warn'));
   if (opts.strokeCheck ?? true) {
     const minStroke = target === 'laser' ? MIN_STROKE_LASER_MM : MIN_STROKE_BLADE_MM;
-    for (const line of lines) {
-      const b = blocks[line.id];
-      if (thinArea(union([b.letters, b.plinth]), minStroke, { stopAbove: THIN_AREA_MM2 }) > THIN_AREA_MM2) notes.push(thinNote(line.id, minStroke));
-    }
+    for (const line of lines) if (isThin(blocks[line.id], minStroke)) notes.push(thinNote(line.id, minStroke));
   }
 
   const seen = new Set<string>();

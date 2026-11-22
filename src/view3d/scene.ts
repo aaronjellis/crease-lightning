@@ -219,6 +219,16 @@ export class CardScene {
     if (this.rt) this.rebuild();
   }
 
+  /** Repaints the paper colours without rebuilding the meshes. */
+  setColours(colours: Card['params']['colours']): void {
+    if (this.card) this.card = { ...this.card, params: { ...this.card.params, colours } };
+    const mats = this.rt?.mats;
+    if (!mats) return;
+    mats.page.color.set(colours.inner);
+    mats.strip.color.set(colours.inner);
+    mats.jacket.color.set(colours.jacket);
+  }
+
   /** Jumps to an opening angle (0 closed, 180 flat), stopping any animation. */
   setTheta(deg: number): void {
     this.stopAnimation();

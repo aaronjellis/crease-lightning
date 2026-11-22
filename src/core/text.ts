@@ -112,13 +112,35 @@ interface Cluster {
   desc: number;
 }
 
-const shapedCache = new WeakMap<TextFont, Map<string, { clusters: Cluster[]; capPx: number }>>();
+/** A least-recently-used cache per font: a hit moves to the back, and the front goes when it's full. */
+function fontCache<V>(limit: number) {
+  const byFont = new WeakMap<TextFont, Map<string, V>>();
+  return {
+    get(font: TextFont, key: string): V | undefined {
+      const m = byFont.get(font);
+      const v = m?.get(key);
+      if (m && v !== undefined) {
+        m.delete(key);
+        m.set(key, v);
+      }
+      return v;
+    },
+    set(font: TextFont, key: string, v: V): V {
+      let m = byFont.get(font);
+      if (!m) byFont.set(font, (m = new Map()));
+      m.set(key, v);
+      if (m.size > limit) m.delete(m.keys().next().value!);
+      return v;
+    },
+  };
+}
+
+/** Shaped lines: about 200 per font covers every line and split a session tries. */
+const shapedCache = fontCache<{ clusters: Cluster[]; capPx: number }>(200);
 
 /** The line shaped whole at the 100 px em and split into clusters, cached per font. */
 function shapeClusters(text: string, font: TextFont): { clusters: Cluster[]; capPx: number } {
-  let cache = shapedCache.get(font);
-  if (!cache) shapedCache.set(font, (cache = new Map()));
-  const hit = cache.get(text);
+  const hit = shapedCache.get(font, text);
   if (hit) return hit;
   const { glyphs } = font.shape(text, TEXT_RENDER_SIZE_PX);
   const starts = [...new Set(glyphs.map((g) => g.cluster))].sort((a, b) => a - b);
@@ -130,10 +152,7 @@ function shapeClusters(text: string, font: TextFont): { clusters: Cluster[]; cap
     const tail = /^[,;\u201A\u201E]$/.test(chars);
     return { index, char: chars, space: /^\s*$/.test(chars), poly, desc: b && !tail ? Math.max(0, b.y + b.h) : 0 };
   });
-  const result = { clusters, capPx: capHeightPx(font, TEXT_RENDER_SIZE_PX) };
-  if (cache.size > 64) cache.delete(cache.keys().next().value!);
-  cache.set(text, result);
-  return result;
+  return shapedCache.set(font, text, { clusters, capPx: capHeightPx(font, TEXT_RENDER_SIZE_PX) });
 }
 
 const shiftX = (poly: Poly, dx: number): Poly => poly.map((c) => c.map((p) => ({ x: p.x + dx, y: p.y })));
@@ -290,8 +309,19 @@ function assemble(raw: Poly, islands: Poly[], inkW: number, plinthH: number, top
   return { letters, plinth, window, waste, inkW, s, capMm, bridges: list.length, bars, bridgeBars: list };
 }
 
+/**
+ * Built blocks, kept across builds: a rebuild that only changes something else (a colour, the stroke
+ * check, the other line) reuses each line's block. Blocks are never changed after they're built.
+ */
+const blockCache = fontCache<Block>(48);
+
 /** The line as a welded, bridged block at cap height `capMm`, with clearance `clearanceMm` all round. */
 export function buildBlock(text: string, font: TextFont, capMm: number, spacing: Spacing, clearanceMm: number): Block {
+  const key = `${capMm}|${spacing}|${clearanceMm}|${text}`;
+  return blockCache.get(font, key) ?? blockCache.set(font, key, makeBlock(text, font, capMm, spacing, clearanceMm));
+}
+
+function makeBlock(text: string, font: TextFont, capMm: number, spacing: Spacing, clearanceMm: number): Block {
   const l = layout(text, font, spacing, capMm);
   const { k, plinthH, toBlock } = placement(l, capMm, clearanceMm);
   let raw: Poly = [];

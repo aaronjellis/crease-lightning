@@ -47,12 +47,24 @@ export interface LoadedFont {
   note?: string;
 }
 
-/** Fetches a bundled file from `fonts/<file>` beside the app. */
-async function bundledFromNetwork(family: string): Promise<ArrayBuffer | null> {
+/** Where a bundled family's file lives under `base` (the app's folder), or null if it isn't bundled. */
+export function bundledFontUrl(family: string, base: string): string | null {
   const file = BUNDLED_FILES[family];
-  if (!file) return null;
-  return fetchFontFile(`${import.meta.env.BASE_URL}fonts/${file}`);
+  return file ? `${base}fonts/${file}` : null;
 }
+
+/**
+ * Fetches bundled files from `fonts/<file>` under `base`. The build worker passes the page's own
+ * folder, because a worker resolves relative URLs against its script, not the page.
+ */
+export const bundledFrom =
+  (base: string) =>
+  async (family: string): Promise<ArrayBuffer | null> => {
+    const url = bundledFontUrl(family, base);
+    return url ? fetchFontFile(url) : null;
+  };
+
+const bundledFromNetwork = (family: string) => bundledFrom(import.meta.env.BASE_URL)(family);
 
 const toFont = (bytes: ArrayBuffer | null | undefined): TextFont | null => {
   if (!bytes) return null;
