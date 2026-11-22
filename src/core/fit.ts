@@ -18,8 +18,7 @@ import {
   WEB_MM,
 } from './constants';
 import {
-  accentHideFix,
-  accentsDontFitNote,
+  accentsHiddenNote,
   bridgeFix,
   clearFix,
   droppedNote,
@@ -333,13 +332,11 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
     // Icons at their preferred size crowd line 2: try them at their minimum height first.
     if (two && (!pick.plans || pick.costsText)) {
       const small = judge(true);
-      if (small.plans && (!small.costsText || !pick.plans || ov('accent:hide'))) pick = small;
+      if (small.plans && (!small.costsText || !pick.plans)) pick = small;
     }
-    if (pick.plans && (!pick.costsText || ov('accent:hide'))) {
-      accents = pick.plans;
-      if (pick.costsText) notes.push(undone('accent:hide'));
-    } else if (!ov('accent:hide')) fixes.push(accentHideFix());
-    else notes.push(accentsDontFitNote());
+    // Accents are decoration (ruling R10): when they don't fit, they hide with an info note, not a fix.
+    if (pick.plans && !pick.costsText) accents = pick.plans;
+    else notes.push(accentsHiddenNote());
   }
 
   // 5 and 6. Each line's cap: the smaller of the cap from height and the cap from width.

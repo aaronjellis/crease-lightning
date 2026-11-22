@@ -5,6 +5,7 @@ import { cardDims, CARD_SIZES, defaultParams, type CardSize, type Params } from 
 import { closedReach } from '../src/core/linkage';
 import { measureLine } from '../src/core/text';
 import { CLEARANCE_MM, FRONT_GAP_MM, MARGIN_MM, RAIL_MM, STRONG_CAP_MM, WARN_CAP_MM, WEB_MM } from '../src/core/constants';
+import { ACCENTS_HIDDEN } from '../src/core/fixes';
 import { THEMES, themeById } from '../src/themes';
 import { arvo, rokkitt, testFonts } from './helpers/fonts';
 import type { FontSet } from '../src/core/fonts';
@@ -109,6 +110,8 @@ describe('fitLayout', () => {
                 });
                 const l = fitLayout(p, fonts, theme, 'blade');
                 expectConstraints(l, p, `${theme.id} ${size} ${spine} ${lines} ${font}`);
+                // Hidden accents are a note, not a fix (R10), so every default builds with zero fixes.
+                expect(l.fixes, `${theme.id} ${size} ${spine} ${lines} ${font}`).toEqual([]);
                 n++;
               }
             }
@@ -217,21 +220,29 @@ describe('fitLayout', () => {
     expect(l.notes.some((n) => n.level === 'warn' && /line 1/i.test(n.message))).toBe(true);
   });
 
-  test('accents hide with accent:hide when the riser is too narrow', () => {
+  test('accents hide with an info note, not a fix, when the riser is too narrow (R10)', () => {
+    const hidden = (l: Layout) => l.notes.filter((n) => n.message === ACCENTS_HIDDEN);
     const p = base({ size: 'a2', line2: 'ALEXANDRA JONES' });
     const l = fitLayout(p, fonts, birthday, 'blade');
-    expect(fixIds(l)).toContain('accent:hide');
     expect(l.steps.some((s) => s.role === 'accent')).toBe(false);
     expect(l.blocks.a1).toBeUndefined();
+    expect(l.blocks.a2).toBeUndefined();
+    expect(l.fixes.filter((f) => f.id.startsWith('accent'))).toEqual([]);
+    expect(hidden(l)).toEqual([{ level: 'info', message: ACCENTS_HIDDEN }]);
+    // Hidden accents give line 2 all the room it would have with accents off.
+    const off = fitLayout({ ...p, accents: false }, fonts, birthday, 'blade');
+    expect(l.blocks.l2.capMm).toBeCloseTo(off.blocks.l2.capMm, 6);
+    expect(hidden(off)).toEqual([]);
     expectConstraints(l, p, 'a2 long line 2');
 
-    // Undoing the fix keeps the accents, at line 2's expense, with a warning.
-    const kept = fitLayout({ ...p, overrides: { 'accent:hide': true } }, fonts, birthday, 'blade');
-    expect(fixIds(kept)).not.toContain('accent:hide');
-    expect(kept.steps.filter((s) => s.role === 'accent').map((s) => s.id)).toEqual(['a1', 'a2']);
-    expect(kept.blocks.l2.capMm).toBeLessThan(l.blocks.l2.capMm);
-    expect(kept.notes.some((n) => n.level === 'warn')).toBe(true);
-    expectConstraints(kept, p, 'a2 long line 2 kept');
+    // A short spine can't hold the default accents beside SAM either: still zero fixes.
+    const short = fitLayout(base({ spine: 'short' }), fonts, birthday, 'blade');
+    expect(short.steps.some((s) => s.role === 'accent')).toBe(false);
+    expect(short.fixes).toEqual([]);
+    expect(hidden(short)).toHaveLength(1);
+
+    // The 5 x 7 default keeps them, with no note.
+    expect(hidden(fitLayout(defaultParams('en-US'), fonts, birthday, 'blade'))).toEqual([]);
   });
 
   test('one-line accents sit at the riser ends, clear of the text in front view', () => {

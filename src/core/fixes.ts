@@ -38,11 +38,6 @@ export const bridgeFix = (n: number, id: string): Fix => ({
   message: `A loose piece in ${name(id)} would fall out, so we joined it to its neighbour with a bridge.`,
 });
 
-export const accentHideFix = (): Fix => ({
-  id: 'accent:hide',
-  message: 'The accents left too little room for your message, so we hid them.',
-});
-
 export const fontFix = (id: string, family: string, fallback: string): Fix => ({
   id: `font:${id}`,
   message: `${family} can't draw every character in ${name(id)}, so we used ${fallback} for that line.`,
@@ -56,7 +51,6 @@ export function undone(fixId: string, detail = ''): Note {
     clear: 'Line 2 may hide part of line 1 when you look at the open card.',
     rail: `The rails beside ${name(id)} are under ${RAIL_MM} mm and may tear.`,
     bridge: 'Without its bridge a piece would fall out, so the bridge stays.',
-    accent: 'The accents stay, so your message has less room.',
     font: `We left out ${detail} in ${name(id)}; your font can't draw it.`,
   };
   return { level: 'warn', message: messages[kind] ?? `You undid ${fixId}.` };
@@ -86,7 +80,10 @@ export const fontMissingNote = (family: string, fallback: string): Note => ({
   message: `We couldn't load ${family}, so we used ${fallback}.`,
 });
 
-export const accentsDontFitNote = (): Note => ({
-  level: 'warn',
-  message: "The accents don't fit this card, so they're hidden.",
-});
+/**
+ * Accents are decoration, like motifs (ruling R10): when they don't fit, they hide with this note,
+ * not a fix, so there is nothing to undo.
+ */
+export const ACCENTS_HIDDEN = 'We left out the pop-up decorations to give your message room.';
+
+export const accentsHiddenNote = (): Note => ({ level: 'info', message: ACCENTS_HIDDEN });
