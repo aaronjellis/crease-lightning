@@ -481,4 +481,65 @@ describe('Flat view editing', () => {
     expect(hit(item.id).getAttribute('aria-pressed')).toBe('true');
     expect(innerSvg().querySelector('.decor-handle')).not.toBeNull();
   });
+
+  describe('analytics from the sheet', () => {
+    const pagehide = () => window.dispatchEvent(new Event('pagehide'));
+    const moved = () => capture.mock.calls.filter((c) => c[0] === 'decor_item_moved');
+
+    test('decor_item_moved is sent once on pagehide with the count of drops and nudges', async () => {
+      const id = await pinFree();
+      key(hit(id), 'ArrowRight');
+      key(hit(id), 'ArrowRight');
+      await app.whenIdle();
+      const at = placedItem(0);
+      // A spot well away from where it sits, so the press is a drag and not a click.
+      const { W, L } = size();
+      const layout = app.getCard().decor;
+      let to: { x: number; y: number } | null = null;
+      for (let y = 10; y < L - 10 && !to; y += 2)
+        if (canPlace(layout, { ...at, page: 'base', centre: { x: at.centre.x, y } }, W, L) && Math.abs(y - at.centre.y) > 10) to = { x: at.centre.x, y };
+      drag(id, at.centre, to!);
+      expect(moved()).toHaveLength(0);
+      pagehide();
+      expect(moved()).toEqual([['decor_item_moved', { project: 'crease-lightning', count: 3 }]]);
+      pagehide();
+      expect(moved()).toHaveLength(1);
+    });
+
+    test('blocked drops, blocked nudges, and resizes do not count', async () => {
+      const id = await pinFree();
+      const item = placedItem();
+      drag(id, item.centre, { x: 0, y: size().L / 2 });
+      key(hit(id), '+');
+      pagehide();
+      expect(moved()).toHaveLength(0);
+    });
+
+    test('nothing is sent on pagehide when nothing moved', () => {
+      pagehide();
+      expect(moved()).toHaveLength(0);
+    });
+
+    test('Delete on the sheet sends decor_item_removed with the icon id', async () => {
+      const id = await pinFree();
+      const icon = app.getParams().decor.items.find((i) => i.id === id)!.icon;
+      key(hit(id), 'Delete');
+      expect(capture).toHaveBeenCalledWith('decor_item_removed', { project: 'crease-lightning', icon });
+    });
+
+    test('Backspace on the sheet sends decor_item_removed with the icon id', async () => {
+      const id = await pinFree();
+      const icon = app.getParams().decor.items.find((i) => i.id === id)!.icon;
+      key(hit(id), 'Backspace');
+      expect(capture).toHaveBeenCalledWith('decor_item_removed', { project: 'crease-lightning', icon });
+    });
+
+    test("the sheet's × button sends decor_item_removed with the icon id", async () => {
+      const id = await pinFree();
+      const icon = app.getParams().decor.items.find((i) => i.id === id)!.icon;
+      click($('.sheet[data-sheet="inner"] .decor-remove'));
+      expect(capture).toHaveBeenCalledWith('decor_item_removed', { project: 'crease-lightning', icon });
+      expect(events().filter((e) => e === 'decor_item_removed')).toHaveLength(1);
+    });
+  });
 });

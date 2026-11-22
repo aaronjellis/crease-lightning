@@ -24,7 +24,7 @@ import { checksCard } from './cards/checks';
 import { decorationsCard } from './cards/decorations';
 import { fontCard } from './cards/font';
 import { messageCard } from './cards/message';
-import { FontLoader, setAnalytics, type BuildState, type Ctx, type Host, type SceneLike, type View } from './context';
+import { FontLoader, setAnalytics, track, type BuildState, type Ctx, type Host, type SceneLike, type View } from './context';
 import { h, svgFrom } from './dom';
 import { exportModal } from './exportModal';
 import { exportNote } from './exportState';
@@ -137,6 +137,13 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   let selected: string | null = null;
   /** The decor from before the last theme change or style pick, for Undo; not in params or the link. */
   let decorStash: Decor | null = null;
+  /** Committed moves this session; sent once when the page hides. */
+  let moves = 0;
+  const onPageHide = () => {
+    if (moves > 0) track('decor_item_moved', { count: moves });
+    moves = 0;
+  };
+  addEventListener('pagehide', onPageHide);
 
   // ---------------------------------------------------------------- notices
   const bannerText = h('p', { class: 'banner-text' });
@@ -174,6 +181,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
       update({ ...params, decor: restore }, false, false);
     },
     canDecorUndo: () => decorStash !== null,
+    noteMove: () => void moves++,
     fonts,
   };
   const rail = themeRail(ctx);
@@ -369,6 +377,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
     stepImages: () => canvas.stepImages(),
     destroy() {
       destroyed = true;
+      removeEventListener('pagehide', onPageHide);
       cancelAnimationFrame(frame);
       [typingTimer, strokeTimer, autosaveTimer, bannerTimer, frameTimer].forEach((t) => clearTimeout(t));
       canvas.destroy();

@@ -22,7 +22,7 @@ import { moveItem, removeItem, resizeItem } from '../core/decor/model';
 import { canPlace } from '../core/decor/place';
 import type { Page } from '../core/decor/types';
 import { iconById } from '../themes';
-import type { Ctx } from './context';
+import { track, type Ctx } from './context';
 import { h } from './dom';
 import { DECORATIONS, FLAT } from './strings';
 
@@ -126,6 +126,7 @@ export function decorEditor(ctx: Ctx): DecorEditor {
     const decor =
       kind === 'move' ? moveItem(params.decor, p.id, toPin(p.page, p.centre, W, L), p.sizeMm) : resizeItem(params.decor, p.id, p.sizeMm);
     pending = p;
+    if (kind === 'move') ctx.noteMove();
     ctx.update({ ...params, decor });
     redrawGhost();
   };
@@ -266,11 +267,13 @@ export function decorEditor(ctx: Ctx): DecorEditor {
   /** Removes the item and clears the selection; focus goes to the sheet, since the item is going. */
   function remove(id: string) {
     const params = ctx.params();
+    const icon = poseOf(id)?.icon;
     pending = null;
     if (document.activeElement !== svg) svg?.focus();
     ctx.update({ ...params, decor: removeItem(params.decor, id) });
     ctx.select(null);
     redrawGhost();
+    if (icon) track('decor_item_removed', { icon });
   }
   removeBtn.addEventListener('click', () => {
     const id = ctx.selection();

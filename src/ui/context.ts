@@ -42,6 +42,8 @@ export interface Ctx {
    */
   decorUndo(): void;
   canDecorUndo(): boolean;
+  /** Counts one committed move (a drag drop or a nudge) for the session's `decor_item_moved` event. */
+  noteMove(): void;
   fonts: FontLoader;
 }
 
