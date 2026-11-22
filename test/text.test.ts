@@ -256,6 +256,91 @@ describe('buildBlock', () => {
     }
   });
 
+  describe('bridge type per Punctuation row', () => {
+    const solid = (blk: ReturnType<typeof buildBlock>) => union([blk.letters, blk.plinth]);
+    const plinthTop = (blk: ReturnType<typeof buildBlock>) => bounds(blk.plinth)!.h;
+
+    test("O'BRIEN: the apostrophe gets a short sideways bar at the top", () => {
+      for (const [name, font] of FONTS) {
+        for (const sp of ['normal', 'loose'] as const) {
+          const blk = buildBlock("O'BRIEN", font, 12, sp, 2);
+          expect(blk.bridgeBars.length, `${name} ${sp}`).toBeGreaterThan(0);
+          for (const { dir, bar } of blk.bridgeBars) {
+            expect(dir, `${name} ${sp}`).not.toBe('down');
+            const b = bounds(bar)!;
+            expect(b.y, `${name} ${sp}`).toBeGreaterThan(plinthTop(blk) + 0.5 * 12);
+            expect(b.w, `${name} ${sp}`).toBeLessThan(3); // short
+          }
+        }
+      }
+    });
+
+    test('ijij in Loose: every dot drops a vertical bar to its stem', () => {
+      for (const [name, font] of FONTS) {
+        const blk = buildBlock('ijij', font, 12, 'loose', 2);
+        expect(blk.bridgeBars.length, name).toBe(4);
+        for (const { dir, bar } of blk.bridgeBars) {
+          expect(dir, name).toBe('down');
+          // It lands on the stem at x-height, not on the plinth.
+          expect(bounds(bar)!.y, name).toBeGreaterThan(plinthTop(blk) + 0.3 * 12);
+        }
+      }
+    });
+
+    test.each([['WHY?'], ['HAPPY 40TH!']])('%s: a vertical bar from the bar to the dot', (t) => {
+      for (const [name, font] of FONTS) {
+        for (const sp of ['normal', 'loose'] as const) {
+          const blk = buildBlock(t, font, 12, sp, 2);
+          const last = layoutGlyphs(t, font, 12, sp, 2).glyphs.at(-1)!;
+          const mark = bounds(last.poly)!;
+          expect(blk.bridgeBars.length, `${name} ${sp}`).toBe(1);
+          const { dir, bar } = blk.bridgeBars[0];
+          const b = bounds(bar)!;
+          expect(dir, `${name} ${sp}`).toBe('down');
+          // Inside the mark's own width, landing on the dot rather than the plinth.
+          expect(b.x).toBeGreaterThanOrEqual(mark.x - 0.01);
+          expect(b.x + b.w).toBeLessThanOrEqual(mark.x + mark.w + 0.01);
+          expect(b.y, `${name} ${sp}`).toBeGreaterThan(plinthTop(blk) + 1);
+        }
+      }
+    });
+
+    test('a hyphen stretches sideways to touch both neighbours when they are within 3 mm', () => {
+      for (const [name, font] of FONTS) {
+        const blk = buildBlock('HI-HO', font, 12, 'normal', 2);
+        expect(blk.bridgeBars.map((b) => b.dir).sort(), name).toEqual(['left', 'right']);
+      }
+    });
+
+    test('MARY-KATE in Normal: the hyphen stretches to K; on the Y side, with no neighbour within 3 mm, it drops to the plinth', () => {
+      for (const [name, font] of FONTS) {
+        const blk = buildBlock('MARY-KATE', font, 12, 'normal', 2);
+        const dirs = blk.bridgeBars.map((b) => b.dir).sort();
+        expect(dirs, name).toEqual(['down', 'right']);
+        const down = bounds(blk.bridgeBars.find((b) => b.dir === 'down')!.bar)!;
+        expect(down.y, name).toBeLessThan(plinthTop(blk)); // reaches into the plinth
+        const hyphen = bounds(layoutGlyphs('MARY-KATE', font, 12, 'normal', 2).glyphs[4].poly)!;
+        const right = bounds(blk.bridgeBars.find((b) => b.dir === 'right')!.bar)!;
+        // The stretch runs at the hyphen's height, from its right end.
+        expect(right.y).toBeGreaterThanOrEqual(hyphen.y - 0.1);
+        expect(right.y + right.h).toBeLessThanOrEqual(hyphen.y + hyphen.h + 0.1);
+        expect(right.x).toBeLessThan(hyphen.x + hyphen.w);
+      }
+    });
+
+    test('CONGRATS, GRAD: the comma merges into the plinth with no bar', () => {
+      for (const [name, font] of FONTS) {
+        for (const sp of SPACINGS) {
+          const blk = buildBlock('CONGRATS, GRAD', font, 12, sp, 2);
+          expect(blk.bridges, `${name} ${sp}`).toBe(0);
+          const comma = layoutGlyphs('CONGRATS, GRAD', font, 12, sp, 2).glyphs.find((g) => g.char === ',')!;
+          expect(area(intersect(comma.poly, blk.plinth)), `${name} ${sp}`).toBeGreaterThan(0.1);
+          expect(outerCount(solid(blk))).toBe(1);
+        }
+      }
+    });
+  });
+
   test('waste is window minus letters and plinth', () => {
     for (const blk of [b, buildBlock("O'BRIEN", arvo, 12, 'loose', 2)]) {
       const solid = union([blk.letters, blk.plinth]);
@@ -316,6 +401,28 @@ describe('thinArea', () => {
     const solid = union([blk.letters, blk.plinth]);
     expect(thinArea(solid, 1.5)).toBeGreaterThan(5);
     expect(thinArea(solid, 1.0)).toBeLessThan(0.05);
+  });
+
+  // The review's probes: thin welds, necks and spurs that must fail a 0.05 mm² threshold.
+  const block = rect(0, 0, 6, 6);
+  test.each([0.05, 0.1, 0.3])('two blocks welded corner to corner by %s mm count', (o) => {
+    const weld = union([block, rect(6 - o, 6 - o, 6, 6)]);
+    expect(outerCount(weld)).toBe(1);
+    expect(thinArea(weld, 1.5)).toBeGreaterThan(0.05);
+  });
+  test.each([
+    [0.3, 0.08],
+    [0.3, 0.2],
+    [0.5, 0.08],
+    [1.0, 0.08],
+    [0.5, 0.19],
+  ])('a neck %s mm long and %s mm wide between two blocks counts', (len, w) => {
+    const neck = union([block, rect(5.99, 3 - w / 2, len + 0.02, w), rect(6 + len, 0, 6, 6)]);
+    expect(outerCount(neck)).toBe(1);
+    expect(thinArea(neck, 1.5)).toBeGreaterThan(0.05);
+  });
+  test.each([0.1, 0.15, 0.19])('a 10 mm spur %s mm wide counts', (w) => {
+    expect(thinArea(union([block, rect(5.99, 3, 10, w)]), 1.5)).toBeGreaterThan(0.05);
   });
 
   test('a 0.8 mm neck between two blocks counts', () => {

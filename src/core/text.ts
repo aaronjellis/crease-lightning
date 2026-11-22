@@ -12,7 +12,7 @@ import {
   type TextConfig,
   type TextFont,
 } from '@kerfuffle/engine/textOutline';
-import { area, bounds, difference, fromPaths64, grow, intersect, offset, outerCount, union, type Poly, type Pt } from '@kerfuffle/engine/geom';
+import { area, bounds, difference, fromPaths64, grow, intersect, offset, union, type Poly, type Pt } from '@kerfuffle/engine/geom';
 import { BRIDGE_MM, CLEARANCE_MM, EXPORT_TOL_MM, PLINTH_MIN_MM, PREVIEW_TOL_MM, TRACK_OVERLAP_MM } from './constants';
 import type { Spacing } from './model';
 
@@ -27,6 +27,14 @@ export interface Block {
   bridges: number;
   /** The bridge bars added to the letters (already merged into `letters`). */
   bars: Poly;
+  /** Each bar on its own, with the way it reaches from the floating piece. */
+  bridgeBars: BridgeBar[];
+}
+
+/** One bridge bar: `down` drops to the part below; `left` and `right` reach sideways. */
+export interface BridgeBar {
+  dir: 'down' | 'left' | 'right';
+  bar: Poly;
 }
 
 /** Tight tracking pulls a pair in by at most this much. */
@@ -265,17 +273,21 @@ function windowPoly(w: number, h: number, r: number): Poly {
   return [pts];
 }
 
-function assemble(raw: Poly, inkW: number, plinthH: number, top: number, capMm: number, c: number): Block {
+/**
+ * `islands` are the glyphs' own pieces (a colon's two dots, an i's dot and stem) before letters
+ * merge, so a piece welded to a neighbour only at a corner can still be found and bridged.
+ */
+function assemble(raw: Poly, islands: Poly[], inkW: number, plinthH: number, top: number, capMm: number, c: number): Block {
   const s = plinthH + top;
   const window = windowPoly(inkW + 2 * c, s + c, c);
   const plinth = rectPoly(c, 0, inkW, plinthH);
   // Comma tails and anything else below P are clipped at the plinth's bottom.
   const clipped = intersect(raw, rectPoly(-1, 0, inkW + 2 * c + 2, s + c + 1));
-  const bridged = bridge(clipped, plinth, capMm);
-  const { bars, count } = bridged;
+  const bridged = bridge(clipped, islands, plinth, capMm);
+  const { bars, list } = bridged;
   const letters = fillSlots(bridged.letters, plinth);
   const waste = difference(window, union([letters, plinth]));
-  return { letters, plinth, window, waste, inkW, s, capMm, bridges: count, bars };
+  return { letters, plinth, window, waste, inkW, s, capMm, bridges: list.length, bars, bridgeBars: list };
 }
 
 /** The line as a welded, bridged block at cap height `capMm`, with clearance `clearanceMm` all round. */
@@ -283,6 +295,7 @@ export function buildBlock(text: string, font: TextFont, capMm: number, spacing:
   const l = layout(text, font, spacing, capMm);
   const { k, plinthH, toBlock } = placement(l, capMm, clearanceMm);
   let raw: Poly = [];
+  const islands = l.clusters.flatMap((c, i) => components(toBlock(c.poly, l.shifts[i])));
   if (l.inkW > 0) {
     const pairAdjustEm: Record<string, number> = {};
     l.clusters.forEach((c, i) => {
@@ -302,23 +315,28 @@ export function buildBlock(text: string, font: TextFont, capMm: number, spacing:
     const baseline = Math.round(outline.baselinesPx[0] * 1000) / 1000;
     raw = toBlock(outline.poly.map((c) => c.map((p) => ({ x: p.x, y: p.y - baseline }))));
   }
-  return assemble(raw, l.inkW * k, plinthH, l.top * k, capMm, clearanceMm);
+  return assemble(raw, islands, l.inkW * k, plinthH, l.top * k, capMm, clearanceMm);
 }
 
 /** An icon (1 mm tall, bottom on y = 0, y up) at `heightMm`, standing on a 3 mm plinth. */
 export function buildIconBlock(icon: Poly, heightMm: number, clearanceMm: number): Block {
   const b = bounds(icon);
-  if (!b) return assemble([], 0, PLINTH_MIN_MM, 0, heightMm, clearanceMm);
+  if (!b) return assemble([], [], 0, PLINTH_MIN_MM, 0, heightMm, clearanceMm);
   const placed = icon.map((c) =>
     c.map((p) => ({ x: (p.x - b.x) * heightMm + clearanceMm, y: (p.y - b.y) * heightMm + PLINTH_MIN_MM - SINK_MM }))
   );
-  return assemble(union([placed]), b.w * heightMm, PLINTH_MIN_MM, b.h * heightMm, heightMm, clearanceMm);
+  const merged = union([placed]);
+  return assemble(merged, components(merged), b.w * heightMm, PLINTH_MIN_MM, b.h * heightMm, heightMm, clearanceMm);
 }
 
-/** Extra regrowth in the opening, so rounding never leaves strips along strokes just over the minimum. */
+/** Extra regrowth in the strip measurement, so rounding never leaves strips along strokes just over the minimum. */
 const REGROW_SLACK_MM = 0.05;
-/** A removed piece thinner than this on average (area / longest side) is chord error or corner slivers. */
-const THIN_FLOOR_MM = 0.2;
+/**
+ * Removed material that vanishes under an erosion this deep is chord error (slivers a few µm thick
+ * along slanted and curved edges, or junk outer-and-hole pairs Clipper returns on them), not a
+ * stroke. A 0.1 mm spur survives it.
+ */
+const NOISE_MM = 0.025;
 
 /** Holes narrower than this are slots between welded letters, too narrow to cut; real counters are wider. */
 const SLOT_MM = 1;
@@ -335,34 +353,50 @@ function fillSlots(letters: Poly, plinth: Poly): Poly {
   return slots.length ? union([letters, ...slots]) : letters;
 }
 
+/** Whether a point lies in a piece: inside its outer contour and none of its holes. */
+const inPiece = (p: Pt, piece: Poly): boolean => inside(p, piece[0]) && !piece.slice(1).some((h) => inside(p, h));
+
 /**
- * The area of material too thin to cut at `minStrokeMm`. An opening at r = minStroke / 2 removes
- * thin strokes but also rounds every convex corner (r²(1 − π/4) each), so only real thin material
- * counts: a removed piece longer than 2 × minStroke, or one that joined pieces the opening split
- * apart (a thin neck). Corner slivers are short and join nothing.
+ * The area of material too thin to cut at `minStrokeMm`, from an opening at r = minStroke / 2.
+ * - Necks: where the eroded core splits one piece in two, the joint is thinner than minStroke. Each
+ *   removed piece that sits between two core pieces counts in full, and never less than
+ *   minStroke² / 4, so even a hairline weld fails a 0.05 mm² threshold.
+ * - Strips: elsewhere, a removed piece counts when what survives a 0.025 mm erosion of it is longer
+ *   than 2 × minStroke. That keeps thin spurs and drops corner slivers (short) and chord noise.
  */
 export function thinArea(poly: Poly, minStrokeMm: number): number {
   const r = minStrokeMm / 2;
-  // Regrowing a hairline core (a stroke just over minStroke) can drop strips in clipper2-js, so
-  // regrow a little further and clip to the shape. Which strokes vanish still depends only on r.
-  const opened = intersect(poly, grow(offset(poly, -r, PREVIEW_TOL_MM), r + REGROW_SLACK_MM, PREVIEW_TOL_MM));
-  const necks = outerCount(opened) > outerCount(poly);
-  const openedPieces = necks ? components(opened) : [];
-  // A neck touches two or more of the opened pieces.
-  const joins = (piece: Poly): boolean => {
-    const near = grow(piece, 0.05, PREVIEW_TOL_MM);
-    return openedPieces.filter((o) => area(intersect(near, o)) > 1e-4).length >= 2;
+  const tol = PREVIEW_TOL_MM;
+  const core = offset(poly, -r, tol);
+  const coreParts = components(core).filter((c) => area(c) > 1e-6);
+  const shapes = components(poly);
+  const coresPerShape = shapes.map((sh) => coreParts.filter((c) => inPiece(c[0][0], sh)).length);
+  const split = coresPerShape.some((n) => n > 1);
+  const betweenCores = (piece: Poly): boolean => {
+    const near = grow(piece, r + 0.1, tol);
+    return coreParts.filter((c) => area(intersect(near, c)) > 1e-6).length >= 2;
   };
-  // Chord error leaves slivers a few µm thick along slanted and curved edges, Clipper can return a
-  // junk outer-and-hole pair on such slivers, and a hairline can chain corner slivers into one long
-  // piece. All of those are under 0.1 mm thick on average; real thin material is a stroke's width.
+
   let total = 0;
-  for (const piece of components(difference(poly, opened))) {
-    const b = bounds(piece)!;
-    const long = Math.max(b.w, b.h);
-    const a = area(piece);
-    if (a / long < THIN_FLOOR_MM) continue;
-    if (long > 2 * minStrokeMm || (necks && joins(piece))) total += a;
+  if (split) {
+    // No regrow slack here: slack would close a short neck again.
+    const opened = intersect(poly, grow(core, r, tol));
+    for (const piece of components(difference(poly, opened))) {
+      if (betweenCores(piece)) total += Math.max(area(piece), minStrokeMm ** 2 / 4);
+    }
+  }
+
+  // Regrowing a hairline core (a stroke just over minStroke) can drop strips in clipper2-js, so the
+  // strip measurement regrows a little further and clips to the shape.
+  const removed = difference(poly, intersect(poly, grow(core, r + REGROW_SLACK_MM, tol)));
+  const survivors = components(offset(removed, -NOISE_MM, tol)).filter((c) => {
+    const b = bounds(c)!;
+    return area(c) > 1e-4 && Math.max(b.w, b.h) > 2 * (minStrokeMm - NOISE_MM);
+  });
+  for (const piece of components(removed)) {
+    if (!survivors.some((c) => inPiece(c[0][0], piece))) continue;
+    if (split && betweenCores(piece)) continue; // counted as a neck
+    total += area(piece);
   }
   return total;
 }
@@ -418,7 +452,7 @@ const AXES: Record<Dir, { to: (p: Pt) => Pt; from: (p: Pt) => Pt }> = {
  * no longer than `reach`. Each candidate is checked on five lines across its width: the bar's end
  * must sit inside solid material on both sides, so it never pokes out into the waste.
  */
-function findBar(f: Poly, others: Poly, dir: Dir, width: number, reach: number): { bar: Poly; gap: number } | null {
+function findBar(f: Poly, others: Poly, dir: Dir, width: number, reach: number): (BridgeBar & { gap: number }) | null {
   const ax = AXES[dir];
   const F = f.map((c) => c.map(ax.to));
   const O = others.map((c) => c.map(ax.to));
@@ -461,7 +495,29 @@ function findBar(f: Poly, others: Poly, dir: Dir, width: number, reach: number):
     { x: x - width / 2, y: hi + e },
   ].map(ax.from);
   if (signedArea(corners) < 0) corners.reverse();
-  return { bar: [corners], gap: best.gap };
+  return { dir, bar: [corners], gap: best.gap };
+}
+
+/**
+ * The free islands (glyph pieces off the plinth) inside `main` that are held only by a joint
+ * thinner than a bridge: within a crop round the island, its eroded core reaches no material
+ * beyond the free islands. A corner-to-corner weld from tight tracking is the usual case.
+ */
+function thinlyHeld(free: Poly[], main: Poly): Poly[] {
+  const r = BRIDGE_MM / 2;
+  const freeZone = free.length ? grow(union(free), 0.05, PREVIEW_TOL_MM) : [];
+  return free.filter((isl) => {
+    const own = offset(isl, -r, PREVIEW_TOL_MM);
+    // An island too thin to have a core is the stroke check's business; one outside `main` is
+    // already a floating piece.
+    if (area(own) <= 1e-6 || area(intersect(own, main)) < 0.99 * area(own)) return false;
+    const b = bounds(isl)!;
+    const local = intersect(main, rectPoly(b.x - 3, b.y - 3, b.w + 6, b.h + 6));
+    // The island's core pieces as they sit in the merged shape, matched by overlap (a point on a
+    // core's edge can't be trusted to test inside).
+    const cores = components(offset(local, -r, PREVIEW_TOL_MM)).filter((c) => area(intersect(c, own)) > 1e-6);
+    return cores.length > 0 && cores.every((c) => area(difference(c, freeZone)) <= 0.01);
+  });
 }
 
 /**
@@ -470,20 +526,24 @@ function findBar(f: Poly, others: Poly, dir: Dir, width: number, reach: number):
  * part within half a cap height drop straight down; anything else reaches sideways to its nearest
  * neighbour. Repeats until letters and plinth are one piece.
  */
-function bridge(raw: Poly, plinth: Poly, capMm: number): { letters: Poly; bars: Poly; count: number } {
+function bridge(raw: Poly, islands: Poly[], plinth: Poly, capMm: number): { letters: Poly; bars: Poly; list: BridgeBar[] } {
   let letters = raw;
-  const bars: Poly = [];
-  let count = 0;
+  const list: BridgeBar[] = [];
   const pb = bounds(plinth);
-  if (!pb) return { letters, bars, count: 0 };
+  if (!pb) return { letters, bars: [], list };
   const anchor = { x: pb.x + pb.w / 2, y: pb.h / 2 };
+  const free = islands.filter((isl) => bounds(isl)!.y > pb.h + 0.05);
   for (let pass = 0; pass < 8; pass++) {
-    const pieces = components(union([letters, plinth]));
-    if (pieces.length <= 1) break;
-    const added: Poly[] = [];
-    pieces.forEach((f, i) => {
-      if (inside(anchor, f[0])) return;
-      const others = pieces.filter((_, j) => j !== i).flat();
+    const solid = union([letters, plinth]);
+    const pieces = components(solid);
+    const floating = pieces
+      .map((f, i) => ({ f, others: pieces.filter((_, j) => j !== i).flat() }))
+      .filter(({ f }) => !inside(anchor, f[0]));
+    const main = pieces.find((f) => inside(anchor, f[0]));
+    if (main) for (const isl of thinlyHeld(free, main)) floating.push({ f: isl, others: difference(solid, isl) });
+    if (floating.length === 0) break;
+    const added: BridgeBar[] = [];
+    floating.forEach(({ f, others }) => {
       const b = bounds(f)!;
       const mid = b.y + b.h / 2 - pb.h;
       const dash = b.w > DASH_ASPECT * b.h && mid > 0.15 * capMm && mid < 0.75 * capMm;
@@ -491,23 +551,22 @@ function bridge(raw: Poly, plinth: Poly, capMm: number): { letters: Poly; bars: 
       if (dash) {
         const w = Math.max(BAR_MM, 0.9 * b.h);
         const sides = [findBar(f, others, 'left', w, DASH_REACH_MM), findBar(f, others, 'right', w, DASH_REACH_MM)];
-        for (const s of sides) if (s) added.push(s.bar);
+        for (const s of sides) if (s) added.push(s);
         const v = sides.some((s) => !s) ? drop(Infinity) : null;
-        if (v) added.push(v.bar);
+        if (v) added.push(v);
         if (sides.some((s) => s) || v) return;
       }
       const v = drop(DROP_REACH_CAP * capMm);
-      if (v) return void added.push(v.bar);
+      if (v) return void added.push(v);
       const side = [findBar(f, others, 'left', BAR_MM, Infinity), findBar(f, others, 'right', BAR_MM, Infinity)]
         .filter((s) => s !== null)
         .sort((p, q) => p.gap - q.gap)[0];
       const any = side ?? drop(Infinity);
-      if (any) added.push(any.bar);
+      if (any) added.push(any);
     });
     if (added.length === 0) break;
-    bars.push(...added.flat());
-    count += added.length;
-    letters = union([letters, ...added]);
+    list.push(...added.map(({ dir, bar }) => ({ dir, bar })));
+    letters = union([letters, ...added.map((a) => a.bar)]);
   }
-  return { letters, bars: union([bars]), count };
+  return { letters, bars: union(list.map((b) => b.bar)), list };
 }
