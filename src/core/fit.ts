@@ -421,7 +421,7 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
     const minStroke = target === 'laser' ? MIN_STROKE_LASER_MM : MIN_STROKE_BLADE_MM;
     for (const line of lines) {
       const b = blocks[line.id];
-      if (thinArea(union([b.letters, b.plinth]), minStroke) > THIN_AREA_MM2) notes.push(thinNote(line.id, minStroke));
+      if (thinArea(union([b.letters, b.plinth]), minStroke, { stopAbove: THIN_AREA_MM2 }) > THIN_AREA_MM2) notes.push(thinNote(line.id, minStroke));
     }
   }
 

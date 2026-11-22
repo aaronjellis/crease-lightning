@@ -357,16 +357,43 @@ function fillSlots(letters: Poly, plinth: Poly): Poly {
 const inPiece = (p: Pt, piece: Poly): boolean => inside(p, piece[0]) && !piece.slice(1).some((h) => inside(p, h));
 
 /**
+ * Vertices `thinArea` may feed to Clipper's offsets before it gives up. A line of slab text at any
+ * size uses a few thousand; a pathological shape (hundreds of slivers) would otherwise stall
+ * clipper2-js for minutes.
+ */
+export const THIN_BUDGET_VERTICES = 60_000;
+
+export interface ThinOptions {
+  /** Stop as soon as the total passes this many mm² and return what was found (the check's threshold). */
+  stopAbove?: number;
+  /** Override the work budget, in vertices (tests). */
+  budget?: number;
+}
+
+const vertexCount = (poly: Poly): number => poly.reduce((n, c) => n + c.length, 0);
+
+/**
  * The area of material too thin to cut at `minStrokeMm`, from an opening at r = minStroke / 2.
  * - Necks: where the eroded core splits one piece in two, the joint is thinner than minStroke. Each
  *   removed piece that sits between two core pieces counts in full, and never less than
  *   minStroke² / 4, so even a hairline weld fails a 0.05 mm² threshold.
  * - Strips: elsewhere, a removed piece counts when what survives a 0.025 mm erosion of it is longer
  *   than 2 × minStroke. That keeps thin spurs and drops corner slivers (short) and chord noise.
+ *
+ * Each removed piece is eroded on its own, after pieces too small or too short to count are dropped:
+ * one erosion of a hundred slivers at once stalls clipper2-js (see `grow` in Kerfuffle's geom). If the
+ * work still passes the budget, the result is `Infinity`: "thin found", so the warning shows and
+ * nothing hangs.
  */
-export function thinArea(poly: Poly, minStrokeMm: number): number {
+export function thinArea(poly: Poly, minStrokeMm: number, opts: ThinOptions = {}): number {
   const r = minStrokeMm / 2;
   const tol = PREVIEW_TOL_MM;
+  const stopAbove = opts.stopAbove ?? Infinity;
+  let budget = opts.budget ?? THIN_BUDGET_VERTICES;
+  /** Charges a step's input to the budget; false once it runs out. */
+  const spend = (input: Poly): boolean => (budget -= vertexCount(input)) >= 0;
+
+  if (!spend(poly)) return Infinity;
   const core = offset(poly, -r, tol);
   const coreParts = components(core).filter((c) => area(c) > 1e-6);
   const shapes = components(poly);
@@ -380,23 +407,32 @@ export function thinArea(poly: Poly, minStrokeMm: number): number {
   let total = 0;
   if (split) {
     // No regrow slack here: slack would close a short neck again.
+    if (!spend(core)) return Infinity;
     const opened = intersect(poly, grow(core, r, tol));
     for (const piece of components(difference(poly, opened))) {
+      if (!spend(piece)) return Infinity;
       if (betweenCores(piece)) total += Math.max(area(piece), minStrokeMm ** 2 / 4);
+      if (total > stopAbove) return total;
     }
   }
 
   // Regrowing a hairline core (a stroke just over minStroke) can drop strips in clipper2-js, so the
   // strip measurement regrows a little further and clips to the shape.
+  if (!spend(core)) return Infinity;
   const removed = difference(poly, intersect(poly, grow(core, r + REGROW_SLACK_MM, tol)));
-  const survivors = components(offset(removed, -NOISE_MM, tol)).filter((c) => {
+  const minLength = 2 * (minStrokeMm - NOISE_MM);
+  const counts = (c: Poly): boolean => {
     const b = bounds(c)!;
-    return area(c) > 1e-4 && Math.max(b.w, b.h) > 2 * (minStrokeMm - NOISE_MM);
-  });
+    return area(c) > 1e-4 && Math.max(b.w, b.h) > minLength;
+  };
   for (const piece of components(removed)) {
-    if (!survivors.some((c) => inPiece(c[0][0], piece))) continue;
+    // Erosion only shrinks a piece, so one already too small or too short can't leave a survivor.
+    if (!counts(piece)) continue;
+    if (!spend(piece)) return Infinity;
+    if (!components(offset(piece, -NOISE_MM, tol)).some(counts)) continue;
     if (split && betweenCores(piece)) continue; // counted as a neck
     total += area(piece);
+    if (total > stopAbove) return total;
   }
   return total;
 }
@@ -450,9 +486,10 @@ const AXES: Record<Dir, { to: (p: Pt) => Pt; from: (p: Pt) => Pt }> = {
 /**
  * The shortest straight bar `width` wide from piece `f` toward `dir` to the nearest other geometry,
  * no longer than `reach`. Each candidate is checked on five lines across its width: the bar's end
- * must sit inside solid material on both sides, so it never pokes out into the waste.
+ * must sit inside solid material on both sides, so it never pokes out into the waste. With `strict`
+ * off (the last resort, for tiny text) only the middle line must land on material.
  */
-function findBar(f: Poly, others: Poly, dir: Dir, width: number, reach: number): (BridgeBar & { gap: number }) | null {
+function findBar(f: Poly, others: Poly, dir: Dir, width: number, reach: number, strict = true): (BridgeBar & { gap: number }) | null {
   const ax = AXES[dir];
   const F = f.map((c) => c.map(ax.to));
   const O = others.map((c) => c.map(ax.to));
@@ -476,11 +513,18 @@ function findBar(f: Poly, others: Poly, dir: Dir, width: number, reach: number):
       const below = c.o.filter((y) => y < (c.f.length ? c.f[0] : hi));
       return below.length ? { top: below[below.length - 1], bottom: below.length > 1 ? below[below.length - 2] : -Infinity } : null;
     });
-    for (const t of tops) {
-      if (!t) ok = false;
-      else lo = Math.min(lo, t.top);
+    if (strict) {
+      for (const t of tops) {
+        if (!t) ok = false;
+        else lo = Math.min(lo, t.top);
+      }
+      if (!ok || tops.some((t) => t!.bottom > lo - e)) continue;
+    } else {
+      // Last resort: the bar lands on whatever sits under its middle line, and its sides may hang
+      // over the waste (a dot narrower than the bar, over a stem narrower than the bar).
+      if (!tops[2]) continue;
+      lo = tops[2].top;
     }
-    if (!ok || tops.some((t) => t!.bottom > lo - e)) continue;
     const gap = hi - lo;
     // A bar wider than the piece is a last resort; among equals, the one nearest the middle wins.
     const score = gap + (present.length < cols.length ? 1000 : 0) + (0.02 * Math.abs(x - fb.x - fb.w / 2)) / width;
@@ -533,6 +577,8 @@ function bridge(raw: Poly, islands: Poly[], plinth: Poly, capMm: number): { lett
   if (!pb) return { letters, bars: [], list };
   const anchor = { x: pb.x + pb.w / 2, y: pb.h / 2 };
   const free = islands.filter((isl) => bounds(isl)!.y > pb.h + 0.05);
+  /** Thinly held islands already given a bar: never barred again, or a bar that doesn't help repeats every pass. */
+  const held = new Set<Poly>();
   for (let pass = 0; pass < 8; pass++) {
     const solid = union([letters, plinth]);
     const pieces = components(solid);
@@ -540,7 +586,12 @@ function bridge(raw: Poly, islands: Poly[], plinth: Poly, capMm: number): { lett
       .map((f, i) => ({ f, others: pieces.filter((_, j) => j !== i).flat() }))
       .filter(({ f }) => !inside(anchor, f[0]));
     const main = pieces.find((f) => inside(anchor, f[0]));
-    if (main) for (const isl of thinlyHeld(free, main)) floating.push({ f: isl, others: difference(solid, isl) });
+    if (main) {
+      for (const isl of thinlyHeld(free.filter((x) => !held.has(x)), main)) {
+        held.add(isl);
+        floating.push({ f: isl, others: difference(solid, isl) });
+      }
+    }
     if (floating.length === 0) break;
     const added: BridgeBar[] = [];
     floating.forEach(({ f, others }) => {
@@ -561,7 +612,12 @@ function bridge(raw: Poly, islands: Poly[], plinth: Poly, capMm: number): { lett
       const side = [findBar(f, others, 'left', BAR_MM, Infinity), findBar(f, others, 'right', BAR_MM, Infinity)]
         .filter((s) => s !== null)
         .sort((p, q) => p.gap - q.gap)[0];
-      const any = side ?? drop(Infinity);
+      const loose = (r: number) => findBar(f, others, 'down', BAR_MM, r, false);
+      const looseSide = () =>
+        [findBar(f, others, 'left', BAR_MM, Infinity, false), findBar(f, others, 'right', BAR_MM, Infinity, false)]
+          .filter((s) => s !== null)
+          .sort((p, q) => p.gap - q.gap)[0];
+      const any = side ?? drop(Infinity) ?? loose(DROP_REACH_CAP * capMm) ?? looseSide() ?? loose(Infinity);
       if (any) added.push(any);
     });
     if (added.length === 0) break;
