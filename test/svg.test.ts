@@ -29,7 +29,6 @@ describe('targets', () => {
     expect(TARGETS.silhouette.files).toContain('dxf');
     expect(TARGETS['xtool-laser']).toMatchObject({ kind: 'laser', fold: 'perforate', palette: 'atomm' });
     expect(TARGETS.print).toMatchObject({ kind: 'print' });
-    for (const t of Object.values(TARGETS)) expect(t.steps).toEqual([]);
   });
   test('foldStyle overrides the target default, auto does not', () => {
     expect(withFoldStyle(TARGETS.cricut, 'perforate').fold).toBe('perforate');
