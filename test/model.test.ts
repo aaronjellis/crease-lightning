@@ -190,4 +190,13 @@ describe('decor model', () => {
     expect(Number.isInteger(d.seed) && d.seed >= 0 && d.seed < 2 ** 32).toBe(true);
     expect(d.items).toEqual(base.items);
   });
+  test('shuffle draws from the source it is given, and never keeps the seed', () => {
+    expect(shuffle(base, () => 0.25).seed).toBe(2 ** 30);
+    expect(shuffle({ ...base, seed: 2 ** 30 }, () => 0.25).seed).toBe(2 ** 30 + 1);
+    expect(shuffle(base, () => 0.25)).toEqual(shuffle(base, () => 0.25));
+  });
+  test('moveItem clamps the pin to the usable rectangle', () => {
+    const moved = moveItem(base, 'i1', { page: 'back', u: 1.4, v: -0.2 });
+    expect(moved.items[0].at).toEqual({ page: 'back', u: 1, v: 0 });
+  });
 });

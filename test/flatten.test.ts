@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest';
 import { area, bounds, difference, grow, intersect, offsetOpen, union, type Poly, type Pt } from '@kerfuffle/engine/geom';
 import { fitLayout, windowY0, type Layout } from '../src/core/fit';
 import { flatten, type Fold, type Piece } from '../src/core/flatten';
-import { placeMotifs } from '../src/core/motifs';
 import { foldU } from '../src/core/linkage';
 import { cardDims, defaultParams, type Params } from '../src/core/model';
 import { decorFromStyle } from '../src/core/decor/model';
@@ -56,6 +55,7 @@ const mapBlock = (poly: Poly, s: StepSpec): Poly => {
 };
 const footprints = union(layout.steps.map((s) => stripRect(s, layout.steps)));
 const wasteOf = (steps: StepSpec[]) => union(steps.map((s) => mapBlock(layout.blocks[s.id].waste, s)));
+/** The holes outside every strip: the decorations. */
 const motifHoles = (piece: Piece) => piece.holes.filter((h) => area(intersect(h, footprints)) < 1e-6);
 
 describe('flatten: Birthday 5 × 7 default', () => {
@@ -200,9 +200,10 @@ describe('flatten: Birthday 5 × 7 default', () => {
     }
   });
 
-  test('motifs keep a web from every footprint, fold, other motif, and the edge margin', () => {
+  test('decorations keep a web from every footprint, fold, other decoration, and the edge margin', () => {
     const motifs = motifHoles(inner);
-    expect(motifs.length).toBe(10);
+    expect(motifs.length).toBe(out.decor.border.length + out.decor.items.length);
+    expect(out.decor.items).toHaveLength(10);
     const grown = motifs.map((m) => grow(m, WEB_MM - 0.02, PREVIEW_TOL_MM));
     const foldLines = union(inner.folds.map((f) => offsetOpen(f.path, 0.01, PREVIEW_TOL_MM)));
     grown.forEach((g, i) => {
@@ -219,26 +220,20 @@ describe('flatten: Birthday 5 × 7 default', () => {
     });
   });
 
-  test('items alternate between the back page and the base page', () => {
-    const motifs = motifHoles(inner);
-    const back = motifs.filter((m) => bounds(m)!.x + bounds(m)!.w < W);
-    const base = motifs.filter((m) => bounds(m)!.x > W);
-    expect(back).toHaveLength(5);
-    expect(base).toHaveLength(5);
-    motifs.forEach((m, i) => expect(bounds(m)!.x < W, `item ${i}`).toBe(i % 2 === 0));
-    // Each band hugs its far edge: the margin line.
-    expect(Math.min(...back.map((m) => bounds(m)!.x))).toBeCloseTo(MARGIN_MM, 1);
-    expect(Math.max(...base.map((m) => bounds(m)!.x + bounds(m)!.w))).toBeCloseTo(2 * W - MARGIN_MM, 1);
+  test('the decoration holes are the placed border tiles, then the items, after the window waste', () => {
+    const cuts = [...out.decor.border, ...out.decor.items.map((it) => it.poly)];
+    expect(out.decor.items.map((it) => it.id)).toEqual(P0.decor.items.map((it) => it.id));
+    expect(inner.holes.slice(layout.steps.length)).toEqual(cuts.map((c) => c.map((r) => r.map((q) => ({ x: q.x + W, y: q.y })))));
   });
 
-  test('with no items there are no motif holes', () => {
+  test('with no items there are no decoration holes', () => {
     const off = flatten(layout, NO_DECOR, birthday);
     expect(motifHoles(off.inner)).toHaveLength(0);
     expect(off.inner.holes).toHaveLength(layout.steps.length);
     expect(symDiff(union(off.inner.holes), wasteOf(layout.steps))).toBeLessThan(1e-3);
   });
 
-  test('the Blank theme has no motif holes', () => {
+  test('the Blank theme has no decoration holes', () => {
     const p = { ...P0, decor: decorFromStyle(blank, null, 1) };
     const l = fit(p, blank);
     expect(flatten(l, p, blank).inner.holes).toHaveLength(l.steps.length);
@@ -282,7 +277,7 @@ describe('flatten: other layouts', () => {
     expect(() => flatten(tall, P0, birthday)).not.toThrow();
   });
 
-  test('A6 and short spine build with every motif clear of the strips', () => {
+  test('A6 and short spine build with every decoration clear of the strips', () => {
     for (const over of [{ size: 'a6' as const }, { spine: 'short' as const }, { size: 'a2' as const }]) {
       const p = { ...P0, ...over };
       const l = fit(p);
@@ -296,54 +291,6 @@ describe('flatten: other layouts', () => {
       const motifs = f.inner.holes.filter((h) => area(intersect(h, fp)) < 1e-6);
       expect(motifs.length, JSON.stringify(over)).toBeGreaterThan(0);
       for (const m of motifs) expect(area(intersect(grow(m, WEB_MM - 0.02, PREVIEW_TOL_MM), fp))).toBeLessThan(1e-6);
-    }
-  });
-});
-
-describe('placeMotifs', () => {
-  const none: Poly = [];
-  const items = decorFromStyle(birthday, 'confetti', 1).items;
-
-  test('with nothing in the way, every motif goes in at its largest size', () => {
-    const placed = placeMotifs(items, none, W, L);
-    expect(placed).toHaveLength(10);
-    const tallest = Math.max(...placed.map((m) => bounds(m)!.w));
-    // Height is along u (the sheet's x): the confetti's largest is 14 mm.
-    expect(tallest).toBeCloseTo(14, 1);
-  });
-
-  test('a motif short of room shrinks, but never under its minimum', () => {
-    // Leave the back-top band only 11 mm deep: room for confetti and stars between 9 and 14 mm.
-    const wall = [[{ x: -W + MARGIN_MM + 11 + WEB_MM, y: 0 }, { x: -1, y: 0 }, { x: -1, y: L }, { x: -W + MARGIN_MM + 11 + WEB_MM, y: L }]] as Pt[][];
-    const placed = placeMotifs(items, wall, W, L).filter((m) => bounds(m)!.x < 0);
-    expect(placed.length).toBe(5);
-    for (const m of placed) {
-      expect(bounds(m)!.w).toBeLessThanOrEqual(11 + 1e-6);
-      expect(bounds(m)!.w).toBeGreaterThanOrEqual(9 - 1e-6);
-    }
-  });
-
-  test('a motif with no room at its minimum drops', () => {
-    const wall = [[{ x: -W + MARGIN_MM + 8 + WEB_MM, y: 0 }, { x: -1, y: 0 }, { x: -1, y: L }, { x: -W + MARGIN_MM + 8 + WEB_MM, y: L }]] as Pt[][];
-    expect(placeMotifs(items, wall, W, L).filter((m) => bounds(m)!.x < 0)).toHaveLength(0);
-  });
-
-  test('no items places nothing', () => {
-    expect(placeMotifs([], none, W, L)).toEqual([]);
-  });
-
-  test('a resized item is placed at its size only', () => {
-    const [one] = placeMotifs([{ ...items[0], sizeMm: 12 }], none, W, L);
-    expect(bounds(one)!.w).toBeCloseTo(12, 6);
-  });
-
-  test("each band's items spread evenly along the spine", () => {
-    const placed = placeMotifs(items, none, W, L);
-    const centres = (page: number) =>
-      placed.filter((_, i) => i % 2 === page).map((m) => bounds(m)!.y + bounds(m)!.h / 2);
-    const span = (L - 2 * MARGIN_MM) / 5;
-    for (const page of [0, 1]) {
-      centres(page).forEach((c, k) => expect(c).toBeCloseTo(MARGIN_MM + (k + 0.5) * span, 6));
     }
   });
 });

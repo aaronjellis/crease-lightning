@@ -3,7 +3,7 @@
  * web, strokes are thick enough, and line 2 doesn't hide line 1. Export needs all but `stroke` to pass:
  * thin strokes warn without blocking (R23).
  */
-import { area, difference, grow, intersect, offsetOpen, outerCount, union, type Poly } from '@kerfuffle/engine/geom';
+import { area, bounds, difference, grow, intersect, offsetOpen, outerCount, union, type Poly, type Rect } from '@kerfuffle/engine/geom';
 import type { Card } from './build';
 import { MARGIN_MM, PREVIEW_TOL_MM, WEB_MM, FRONT_GAP_MM } from './constants';
 import { foldU, frameAB } from './linkage';
@@ -30,6 +30,10 @@ const TOUCH_MM2 = 1e-4;
 
 type Check = Omit<CheckResult, 'id'>;
 type Subject = Omit<Card, 'checks'>;
+
+/** Whether two boxes overlap; a null box (an empty zone) overlaps nothing. */
+const boxesMeet = (a: Rect | null, b: Rect | null): boolean =>
+  !!a && !!b && a.x <= b.x + b.w && b.x <= a.x + a.w && a.y <= b.y + b.h && b.y <= a.y + a.h;
 
 const mm = (v: number): string => `${Math.round(v * 100) / 100} mm`;
 
@@ -85,13 +89,20 @@ function layoutCheck(card: Subject, p: Params): Check {
   }
 
   const r = (WEB_MM - 0.02) / 2;
+  // Boxes first, and each zone grown only on a box hit: a border adds dozens of holes, most pairs
+  // are far apart, and growing a hole is the slow part.
+  const zoned = (name: string, raw: Poly, make: () => Poly) => {
+    const b = bounds(raw);
+    let zone: Poly | null = null;
+    return { name, box: b && { x: b.x - r, y: b.y - r, w: b.w + 2 * r, h: b.h + 2 * r }, zone: () => (zone ??= make()) };
+  };
   const cuts = [
-    ...card.inner.holes.map((h, i) => ({ name: `hole ${i + 1}`, zone: grow(h, r, PREVIEW_TOL_MM) })),
-    ...card.inner.openCuts.map((c, i) => ({ name: `cut ${i + 1}`, zone: offsetOpen(c, r, PREVIEW_TOL_MM) })),
+    ...card.inner.holes.map((h, i) => zoned(`hole ${i + 1}`, h, () => grow(h, r, PREVIEW_TOL_MM))),
+    ...card.inner.openCuts.map((c, i) => zoned(`cut ${i + 1}`, [c], () => offsetOpen(c, r, PREVIEW_TOL_MM))),
   ];
   for (let i = 0; i < cuts.length; i++) {
     for (let j = i + 1; j < cuts.length; j++) {
-      if (area(intersect(cuts[i].zone, cuts[j].zone)) > EPS) {
+      if (boxesMeet(cuts[i].box, cuts[j].box) && area(intersect(cuts[i].zone(), cuts[j].zone())) > EPS) {
         return { ok: false, detail: `${cuts[i].name} and ${cuts[j].name} are closer than ${WEB_MM} mm.` };
       }
     }

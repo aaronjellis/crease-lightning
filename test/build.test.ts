@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { applyTheme, BIRTHDAY_DEFAULTS, CARD_SIZES, defaultParams, withSize, type CardSize, type Params } from '../src/core/model';
 import { build } from '../src/core/build';
+import { decorFromStyle } from '../src/core/decor/model';
 import { THEMES } from '../src/themes';
 import { testFonts } from './helpers/fonts';
 
@@ -144,6 +145,32 @@ describe('build', () => {
                 const failed = card.checks.filter((c) => !c.ok).map((c) => `${c.id} (${c.detail})`);
                 if (failed.length || card.fixes.length || !card.exportable) {
                   bad.push(`${label}: checks [${failed.join('; ')}] fixes [${card.fixes.map((f) => f.id).join(', ')}]`);
+                }
+              }
+            }
+          }
+          expect(bad).toEqual([]);
+        }, 60_000);
+      }
+    }
+  });
+
+  describe('matrix: theme × style × size × spine × line count (decorations)', () => {
+    // One test per theme and style, so no single test blocks the worker for long (R21).
+    for (const theme of THEMES) {
+      const base = applyTheme(P0, theme, BIRTHDAY_DEFAULTS);
+      const lines: [string, string][] = [[base.line1, base.line2 || 'SAM'], [base.line1, '']];
+      for (const style of theme.styles) {
+        test(`${theme.id} ${style.id}: every size, spine and line count builds with no fixes, one piece, clean layout`, () => {
+          const bad: string[] = [];
+          for (const size of Object.keys(CARD_SIZES) as CardSize[]) {
+            for (const spine of ['long', 'short'] as const) {
+              for (const [line1, line2] of lines) {
+                const p: Params = { ...withSize(base, size), spine, line1, line2, decor: decorFromStyle(theme, style.id, 1) };
+                const card = build(p, assets, 'blade', { strokeCheck: false });
+                const failed = card.checks.filter((c) => (c.id === 'one-piece' || c.id === 'layout') && !c.ok).map((c) => `${c.id} (${c.detail})`);
+                if (failed.length || card.fixes.length) {
+                  bad.push(`${size} ${spine} "${line1}" / "${line2}": checks [${failed.join('; ')}] fixes [${card.fixes.map((f) => f.id).join(', ')}]`);
                 }
               }
             }

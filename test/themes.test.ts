@@ -4,6 +4,7 @@ import { applyTheme, BIRTHDAY_DEFAULTS, defaultParams, type ThemeDefaults, type 
 import { fitLayout } from '../src/core/fit';
 import { testFonts } from './helpers/fonts';
 import { BRIDGE_MM, MIN_STROKE_BLADE_MM } from '../src/core/constants';
+import { MAX_ITEM_MM } from '../src/core/codec';
 import { thinArea } from '../src/core/text';
 import { BORDERS, ICONS, THEMES, borderById, iconById, loadIcon, themeById } from '../src/themes';
 
@@ -179,7 +180,7 @@ describe('themes', () => {
           const i = iconById(it.icon);
           expect(it.minMm, `${t.id}/${st.id}/${it.icon}`).toBeGreaterThanOrEqual(i.minHeightMm);
           expect(it.maxMm).toBeGreaterThanOrEqual(it.minMm);
-          expect(it.maxMm).toBeLessThanOrEqual(60);
+          expect(it.maxMm).toBeLessThanOrEqual(MAX_ITEM_MM);
           expect(it.count).toBeGreaterThan(0);
         }
       }

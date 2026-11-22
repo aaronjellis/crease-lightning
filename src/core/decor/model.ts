@@ -1,4 +1,7 @@
-/** Pure edits on a {@link Decor}. Each returns a new decor and leaves its input untouched. */
+/**
+ * Edits on a {@link Decor}. Each returns a new decor and leaves its input untouched. All are pure
+ * except `shuffle`, which draws from a random source you can pass in.
+ */
 import { iconById, type Theme } from '../../themes';
 import type { Decor, DecorItem, Page } from './types';
 
@@ -38,9 +41,11 @@ const edit = (decor: Decor, id: string, f: (i: DecorItem) => DecorItem): Decor =
   items: decor.items.map((i) => (i.id === id ? f(i) : i)),
 });
 
-/** Pins the item at `at` (fractions of the page's usable rectangle). */
+const clamp01 = (t: number): number => Math.min(1, Math.max(0, t));
+
+/** Pins the item at `at` (fractions of the page's usable rectangle, clamped to [0, 1]). */
 export function moveItem(decor: Decor, id: string, at: { page: Page; u: number; v: number }): Decor {
-  return edit(decor, id, (i) => ({ ...i, at: { ...at } }));
+  return edit(decor, id, (i) => ({ ...i, at: { page: at.page, u: clamp01(at.u), v: clamp01(at.v) } }));
 }
 
 /** Fixes the item's size. */
@@ -53,9 +58,8 @@ export function unpinAll(decor: Decor): Decor {
   return { ...decor, items: decor.items.map(({ at: _at, ...rest }) => rest) };
 }
 
-/** A new scatter seed, never the current one. */
-export function shuffle(decor: Decor): Decor {
-  let seed = decor.seed;
-  while (seed === decor.seed) seed = Math.floor(Math.random() * 2 ** 32) >>> 0;
-  return { ...decor, seed };
+/** A new scatter seed from `random` (values in [0, 1)), never the current one. */
+export function shuffle(decor: Decor, random: () => number = Math.random): Decor {
+  const seed = Math.floor(random() * 2 ** 32) >>> 0;
+  return { ...decor, seed: seed === decor.seed ? (seed + 1) >>> 0 : seed };
 }
