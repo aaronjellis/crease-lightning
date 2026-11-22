@@ -84,21 +84,32 @@ const openPath = (pts: Pt[], f: Frame): string => `M${pts.map((p) => pt(p, f)).j
 const closedPath = (poly: Poly, f: Frame): string =>
   polyToSvgPath(poly.map((c) => c.map((p) => ({ x: p.x + f.dx, y: f.heightMm - p.y }))), 3);
 
-const path = (d: string, stroke: string): string =>
-  `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${STROKE_MM}"/>`;
+/** Preview-only attributes (never in exported files): a hairline at any zoom and what each path is. */
+export interface SvgOptions {
+  preview?: boolean;
+}
+
+const path = (d: string, stroke: string, extra = ''): string =>
+  `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${STROKE_MM}"${extra}/>`;
+
+const mark = (preview: boolean | undefined, part: string, fold?: string): string =>
+  preview ? ` vector-effect="non-scaling-stroke" data-part="${part}"${fold ? ` data-fold="${fold}"` : ''}` : '';
 
 /** The Cut and Score groups of one piece. `prefix` keeps ids unique when a file holds two pieces. */
-function layers(piece: Piece, target: Target, colours: Colours, f: Frame, prefix: string): string {
+function layers(piece: Piece, target: Target, colours: Colours, f: Frame, prefix: string, preview?: boolean): string {
   const cut: string[] = [];
   // Holes first, then the strip cuts, then the outline last.
-  for (const h of piece.holes) cut.push(path(closedPath(h, f), colours.cut));
-  for (const c of piece.openCuts) cut.push(path(openPath(c, f), colours.cut));
+  for (const h of piece.holes) cut.push(path(closedPath(h, f), colours.cut, mark(preview, 'hole')));
+  for (const c of piece.openCuts) cut.push(path(openPath(c, f), colours.cut, mark(preview, 'cut')));
   if (target.fold === 'perforate') {
-    for (const fold of piece.folds) cut.push(path(perforate(fold.path).map((d) => openPath(d, f)).join(''), colours.cut));
+    for (const fold of piece.folds) {
+      cut.push(path(perforate(fold.path).map((d) => openPath(d, f)).join(''), colours.cut, mark(preview, 'perforation', fold.kind)));
+    }
   }
-  cut.push(path(closedPath(piece.outline, f), colours.cut));
+  cut.push(path(closedPath(piece.outline, f), colours.cut, mark(preview, 'outline')));
 
-  const score = target.fold === 'score' ? piece.folds.map((fold) => path(openPath(fold.path, f), colours.score)) : [];
+  const score =
+    target.fold === 'score' ? piece.folds.map((fold) => path(openPath(fold.path, f), colours.score, mark(preview, 'fold', fold.kind))) : [];
   const group = (id: string, items: string[]) =>
     `<g id="${prefix}${id}" inkscape:label="${prefix}${id}" inkscape:groupmode="layer">${items.join('')}</g>`;
   return group('Cut', cut) + group('Score', score);
@@ -107,10 +118,10 @@ function layers(piece: Piece, target: Target, colours: Colours, f: Frame, prefix
 const svgOpen = (w: number, h: number): string =>
   `<svg ${NS} width="${num(w)}mm" height="${num(h)}mm" viewBox="0 0 ${num(w)} ${num(h)}">`;
 
-/** One piece as an SVG with `Cut` and `Score` layers. */
-export function pieceSvg(piece: Piece, target: Target, colours: Colours): string {
+/** One piece as an SVG with `Cut` and `Score` layers. `preview` marks paths for the on-screen Flat view. */
+export function pieceSvg(piece: Piece, target: Target, colours: Colours, opts: SvgOptions = {}): string {
   const f: Frame = { heightMm: piece.heightMm, dx: 0 };
-  return `${svgOpen(piece.widthMm, piece.heightMm)}${layers(piece, target, colours, f, '')}</svg>\n`;
+  return `${svgOpen(piece.widthMm, piece.heightMm)}${layers(piece, target, colours, f, '', opts.preview)}</svg>\n`;
 }
 
 /** The inner sheet and jacket side by side with a 10 mm gap, each with its own paper colours and layers. */

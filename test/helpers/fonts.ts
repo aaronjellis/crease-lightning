@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
+// Node's URL, not the DOM one: happy-dom (test/ui.test.ts) replaces the global with one that drops file: paths.
+import { URL as NodeURL } from 'node:url';
 import { harfbuzzFont } from '@kerfuffle/engine/hbFont';
 import type { TextFont } from '@kerfuffle/engine/hbFont';
 import type { FontSet } from '../../src/core/fonts';
 
 const read = (file: string): ArrayBuffer => {
-  const b = readFileSync(new URL(`../../public/fonts/${file}`, import.meta.url));
+  const b = readFileSync(new NodeURL(`../../public/fonts/${file}`, import.meta.url));
   return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
 };
 

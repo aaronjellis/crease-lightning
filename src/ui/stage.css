@@ -1,0 +1,148 @@
+/* The canvas (3D and Flat tabs) and the export modal. Tokens live on .cl-app in app.css. */
+
+/* ------------------------------------------------------------ stage */
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: radial-gradient(ellipse 80% 70% at 50% 42%, #fffdf9 0%, #f3eee6 60%, #ebe4d9 100%);
+}
+.tabs {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 2;
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgb(255 253 249 / 0.85);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+}
+.tab { height: 32px; padding: 0 16px; border: 0; border-radius: 999px; background: none; font-weight: 600; color: var(--ink-2); }
+.tab[aria-selected='true'] { background: var(--ink); color: var(--surface); }
+.stage-views { position: relative; flex: 1; min-height: 0; }
+.view-3d, .view-flat { position: absolute; inset: 0; }
+.scene { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.scene:active { cursor: grabbing; }
+.view-bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: calc(100% - 24px); }
+.view-controls, .fold-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 999px;
+  background: rgb(255 253 249 / 0.92);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+}
+.angle { width: 160px; accent-color: var(--ink); }
+.fold-it { border-color: var(--line-strong) !important; }
+.fold-steps { width: min(560px, calc(100vw - 24px)); border-radius: 18px; padding: 6px 8px; }
+.step-copy { display: grid; flex: 1; min-width: 0; padding: 0 4px; font-size: 13px; line-height: 1.3; }
+.step-count { color: var(--ink-3); font-size: 11.5px; font-weight: 600; }
+.no-3d {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 280px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: center;
+  color: var(--ink-2);
+}
+.stage-loading {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  font-weight: 600;
+}
+.spinner { width: 14px; height: 14px; border: 2px solid var(--line-strong); border-top-color: var(--ink); border-radius: 50%; animation: cl-spin 0.8s linear infinite; }
+@keyframes cl-spin { to { transform: rotate(360deg); } }
+.stage.is-loading .scene, .stage.is-loading .flat-sheets { opacity: 0.45; transition: opacity 0.2s; }
+.stage.is-placeholder .scene, .stage.is-placeholder .flat-sheets { opacity: 0.55; filter: grayscale(0.7); }
+.stage-placeholder {
+  position: absolute;
+  top: 60px;
+  left: 16px;
+  max-width: calc(100% - 32px);
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------ flat view */
+.view-flat { overflow: auto; }
+.flat-view { display: flex; flex-direction: column; gap: 16px; min-height: 100%; padding: 64px 24px 24px; }
+.flat-sheets { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; align-items: start; }
+.sheet { margin: 0; }
+.sheet svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.1)) drop-shadow(0 6px 14px rgb(0 0 0 / 0.07)); }
+.sheet figcaption { margin-top: 8px; color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
+.flat-view path { stroke-width: 1.15px; stroke-linejoin: round; }
+.flat-view [data-part='hole'] { fill: var(--show-through); }
+.flat-view [data-fold='valley'] { stroke-dasharray: 6 4; }
+.flat-view [data-fold='mountain'] { stroke-dasharray: 9 3 2 3; }
+.flat-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; list-style: none; color: var(--ink-2); font-size: 12.5px; }
+.flat-legend li { display: flex; align-items: center; gap: 8px; }
+.flat-legend svg { width: 28px; height: 6px; }
+.flat-legend line { stroke: var(--ink); stroke-width: 1.5px; }
+.flat-legend [data-legend='valley'] { stroke-dasharray: 5 3; }
+.flat-legend [data-legend='mountain'] { stroke-dasharray: 7 2 2 2; }
+.swatch-hole { width: 14px; height: 14px; border-radius: 4px; background: var(--show-through, var(--brand-a)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15); }
+
+/* ------------------------------------------------------------ export modal */
+.export-modal {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 24px 64px rgb(28 26 23 / 0.28);
+}
+.export-modal::backdrop { background: rgb(28 26 23 / 0.45); backdrop-filter: blur(2px); }
+.modal-body { display: grid; gap: 16px; padding: 22px 24px 24px; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; }
+.modal-head h2 { font: 700 22px/1.2 var(--display); }
+.targets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.target {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+}
+.target:hover { border-color: var(--line-strong); }
+.target[aria-pressed='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.target-name { font: 700 15px/1.25 var(--display); }
+.target-files { color: var(--ink-3); font-size: 12px; }
+.export-steps-box { display: grid; gap: 8px; padding: 14px 16px; border-radius: 12px; background: var(--sunk); }
+.export-steps { display: grid; gap: 6px; margin: 0; padding-left: 20px; line-height: 1.45; }
+.export-steps code { padding: 1px 5px; border-radius: 4px; background: var(--surface); font: 500 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.export-blocked { padding: 12px 16px; border-left: 3px solid var(--strong); border-radius: 8px; background: var(--strong-bg); color: var(--strong); font-size: 13px; }
+.export-blocked ul { margin: 6px 0 0; padding-left: 18px; }
+.modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 16px; }
+.export-status { margin-right: auto; color: var(--ink-2); font-size: 13px; }
+
