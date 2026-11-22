@@ -129,17 +129,20 @@ describe('layout: open cuts and edges', () => {
 });
 
 describe('layout', () => {
+  // A card with no decorations, so the hand-made cuts below meet nothing but each other.
+  const { checks: _bare, ...bare } = build({ ...P0, decor: { ...P0.decor, items: [] } }, assets, 'blade', { strokeCheck: false });
+
   test('two cuts 1 mm apart fail', () => {
     const a = [[{ x: 2 * W - 40, y: 80 }, { x: 2 * W - 30, y: 80 }, { x: 2 * W - 30, y: 85 }, { x: 2 * W - 40, y: 85 }]];
     const b = [[{ x: 2 * W - 29, y: 80 }, { x: 2 * W - 20, y: 80 }, { x: 2 * W - 20, y: 85 }, { x: 2 * W - 29, y: 85 }]];
-    const close: Base = { ...base, inner: { ...base.inner, holes: [...base.inner.holes, a, b] } };
+    const close: Base = { ...bare, inner: { ...bare.inner, holes: [...bare.inner.holes, a, b] } };
     expect(result(run(close), 'layout').ok).toBe(false);
   });
 
   test('cuts 4 mm apart pass', () => {
     const a = [[{ x: 2 * W - 40, y: 80 }, { x: 2 * W - 30, y: 80 }, { x: 2 * W - 30, y: 85 }, { x: 2 * W - 40, y: 85 }]];
     const b = [[{ x: 2 * W - 26, y: 80 }, { x: 2 * W - 20, y: 80 }, { x: 2 * W - 20, y: 85 }, { x: 2 * W - 26, y: 85 }]];
-    const apart: Base = { ...base, inner: { ...base.inner, holes: [...base.inner.holes, a, b] } };
+    const apart: Base = { ...bare, inner: { ...bare.inner, holes: [...bare.inner.holes, a, b] } };
     expect(result(run(apart), 'layout').ok).toBe(true);
   });
 
@@ -189,7 +192,7 @@ describe('front-view', () => {
   });
 
   test('a one-line card has nothing to clear', () => {
-    const one = build({ ...P0, line2: '', accents: false }, assets, 'blade', { strokeCheck: false });
+    const one = build({ ...P0, line2: '' }, assets, 'blade', { strokeCheck: false });
     expect(one.layout.steps).toHaveLength(1);
     expect(result(one.checks, 'front-view').ok).toBe(true);
   });

@@ -1,4 +1,8 @@
 import { CLEARANCE_MM, OVERHANG_DEFAULT_MM, RAIL_MM } from './constants';
+import { decorFromStyle } from './decor/model';
+import type { Decor } from './decor/types';
+import { birthday } from '../themes/birthday';
+import type { Style } from '../themes/types';
 
 export type CardSize = '5x7' | 'a2' | 'a6' | 'a5';
 export type ThemeId =
@@ -28,7 +32,7 @@ export interface StepDims {
 }
 
 export interface Params {
-  version: 1;
+  version: 2;
   theme: ThemeId;
   line1: string;
   line2: string;
@@ -39,8 +43,7 @@ export interface Params {
   size: CardSize;
   spine: 'long' | 'short';
   colours: { inner: string; jacket: string };
-  accents: boolean;
-  motifs: boolean;
+  decor: Decor;
   advanced: {
     line1?: StepDims;
     line2?: StepDims;
@@ -52,20 +55,22 @@ export interface Params {
   overrides: Record<string, true>;
 }
 
-/** The slice of a theme that the model needs. Task 5's `Theme` is a superset. */
+/** The slice of a theme that the model needs. `Theme` is a superset. */
 export interface ThemeDefaults {
   id: ThemeId;
   lines: [string, string];
   font: string;
   colours: { inner: string; jacket: string };
+  styles: Style[];
 }
 
-/** Placeholder until Task 5 re-points this at the Birthday theme data. */
+/** The Birthday theme's defaults. */
 export const BIRTHDAY_DEFAULTS: ThemeDefaults = {
-  id: 'birthday',
-  lines: ['HAPPY BIRTHDAY', 'SAM'],
-  font: 'Arvo',
-  colours: { inner: '#ffffff', jacket: '#e8453c' },
+  id: birthday.id,
+  lines: birthday.lines,
+  font: birthday.font,
+  colours: birthday.colours,
+  styles: birthday.styles,
 };
 
 export const CARD_SIZES: Record<CardSize, { closedW: number; closedL: number; label: string }> = {
@@ -84,7 +89,7 @@ export function cardDims(p: Params): { W: number; L: number } {
 export function defaultParams(locale: string): Params {
   const t = BIRTHDAY_DEFAULTS;
   return {
-    version: 1,
+    version: 2,
     theme: t.id,
     line1: t.lines[0],
     line2: t.lines[1],
@@ -95,8 +100,7 @@ export function defaultParams(locale: string): Params {
     size: locale === 'en-US' ? '5x7' : 'a6',
     spine: 'long',
     colours: { ...t.colours },
-    accents: true,
-    motifs: true,
+    decor: decorFromStyle(t, 'confetti', 1),
     advanced: {
       overhangMm: OVERHANG_DEFAULT_MM,
       railMm: RAIL_MM,
@@ -110,7 +114,8 @@ export function defaultParams(locale: string): Params {
 /**
  * Switch theme. A line is replaced only when untouched: it equals prev's default
  * line (prev is the current theme's defaults), so a cleared line stays empty.
- * Fixes are recomputed for the new geometry, so overrides clear.
+ * Fixes are recomputed for the new geometry, so overrides clear. The decorations
+ * become the new theme's first style; the scatter seed stays.
  */
 export function applyTheme(p: Params, next: ThemeDefaults, prev: ThemeDefaults): Params {
   return {
@@ -120,6 +125,7 @@ export function applyTheme(p: Params, next: ThemeDefaults, prev: ThemeDefaults):
     line2: p.line2 === prev.lines[1] ? next.lines[1] : p.line2,
     font: next.font,
     colours: { ...next.colours },
+    decor: decorFromStyle(next, next.styles[0]?.id ?? null, p.decor.seed),
     overrides: {},
   };
 }

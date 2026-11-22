@@ -1,7 +1,7 @@
 /**
  * Layout fit: how a typed message becomes pop-up steps. Decides one or two lines, each step's depth
- * d, height h and letter height s, where strips sit along the spine, and where the theme's accents
- * go, all inside the constraints that make the card close flat (see the spec's "Why the folds work").
+ * d, height h and letter height s, and where strips sit along the spine, all inside the constraints
+ * that make the card close flat (see the spec's "Why the folds work").
  * u runs across the card from the spine, y along it; every size is mm.
  */
 import { bounds, union } from '@kerfuffle/engine/geom';
@@ -18,7 +18,6 @@ import {
   WEB_MM,
 } from './constants';
 import {
-  accentsHiddenNote,
   line2DroppedNote,
   bridgeFix,
   clearFix,
@@ -39,17 +38,17 @@ import {
 import { FALLBACK_FAMILY, type FontSet } from './fonts';
 import { cardDims, type Params, type Spacing, type StepDims } from './model';
 import { definedDims, pipeSplit, splitBalanced, tidy } from './lines';
-import { accentSpace, MIN_H_MM, placeOneLine, placeTwoLines, sizeAccent, type AccentPlan } from './place';
+import { MIN_H_MM, placeOneLine, placeTwoLines } from './place';
 import { buildBlock, measureLine, normaliseText, thinArea, type Block } from './text';
 import type { StepSpec } from './types';
-import { iconById, type Theme } from '../themes';
+import type { Theme } from '../themes';
 
 export type { Fix, Note } from './fixes';
 export { splitBalanced } from './lines';
 
 export interface Layout {
   steps: StepSpec[];
-  /** Keyed by step id: `l1`, `l2`, `a1`, `a2`. */
+  /** Keyed by step id: `l1`, `l2`. */
   blocks: Record<string, Block>;
   lines: string[];
   fixes: Fix[];
@@ -242,7 +241,6 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
   const [L1, L2] = lines;
 
   // 3. Step dims: the size table scaled by W / 127, Advanced on top, then the fit fixes.
-  const accRail = Math.max(RAIL_MM, two ? rail2 : rail1);
   const avail1 = L - 2 * MARGIN_MM - 2 * rail1 - 2 * c;
   const avail2 = L - 2 * MARGIN_MM - 2 * rail1 - 2 * rail2 - 2 * c;
   const m1 = measure(L1.text, L1.font);
@@ -332,36 +330,6 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
     }
   }
 
-  // 4. Accents, children on line 1's hinge A.
-  let accents: AccentPlan[] = [];
-  if (p.accents && theme.accents.length === 2) {
-    const room = { k, W, d1: dims1.d, h1: dims1.h, c, rail: accRail };
-    /**
-     * Whether a pair fits at all, and whether it costs line 2 size: in two-line mode it does when
-     * line 2 would come out smaller than without accents and under the warning size.
-     */
-    const judge = (smallest: boolean) => {
-      const plans = theme.accents.map((icon, i) => sizeAccent(i === 0 ? 'a1' : 'a2', iconById(icon), room, smallest));
-      if (!plans.every((a) => a !== null)) return { plans: null, costsText: false };
-      const ws = plans.map((a) => a!.stripW);
-      if (!two) return { plans: ws[0] + ws[1] + WEB_MM <= L - 2 * MARGIN_MM - 2 * rail1 ? (plans as AccentPlan[]) : null, costsText: false };
-      const left = avail2 - accentSpace(ws);
-      if (left <= 0) return { plans: null, costsText: false };
-      const capH2 = capFromHeight(m2!, sLimit2());
-      const withAcc = Math.min(capH2, capFromWidth(L2.text, L2.font, left));
-      return { plans: plans as AccentPlan[], costsText: withAcc < Math.min(capH2, capW2) - 1e-6 && withAcc < WARN_CAP_MM };
-    };
-    let pick = judge(false);
-    // Icons at their preferred size crowd line 2: try them at their minimum height first.
-    if (two && (!pick.plans || pick.costsText)) {
-      const small = judge(true);
-      if (small.plans && (!small.costsText || !pick.plans)) pick = small;
-    }
-    // Accents are decoration (ruling R10): when they don't fit, they hide with an info note, not a fix.
-    if (pick.plans && !pick.costsText) accents = pick.plans;
-    else notes.push(accentsHiddenNote());
-  }
-
   // 5 and 6. Each line's cap: the smaller of the cap from height and the cap from width.
   function sLimit1(): number {
     return Math.min(dims1.d - c - WEB_MM, dims1.reach ? W - MARGIN_MM - dims1.d - dims1.h : Infinity, dims1.s ?? Infinity);
@@ -399,33 +367,22 @@ export function fitLayout(p: Params, fonts: FontSet, theme: Theme, target: 'blad
   const blocks: Record<string, Block> = {};
   blocks.l1 = solve(L1, m1, sLimit1(), avail1, capW1);
   if (two && dims2) {
-    const left = avail2 - accentSpace(accents.map((a) => a.stripW));
-    blocks.l2 = solve(L2, m2!, sLimit2(), left, accents.length ? capFromWidth(L2.text, L2.font, left) : capW2);
+    blocks.l2 = solve(L2, m2!, sLimit2(), avail2, capW2);
   }
 
   // 7. Strips along the spine, centred on L / 2.
   const window1 = blocks.l1.inkW + 2 * c;
-  const accentWs = accents.map((a) => a.stripW);
   const steps: StepSpec[] = [];
-  let accentSpans: { y0: number; y1: number }[];
   if (two && dims2) {
     const strip2 = blocks.l2.inkW + 2 * c + 2 * rail2;
-    const placed = placeTwoLines(L, window1, rail1, strip2, accentWs);
+    const placed = placeTwoLines(L, window1, rail1, strip2);
     steps.push({ id: 'l1', role: 'line1', parentId: null, ...placed.root, d: dims1.d, h: dims1.h, s: blocks.l1.s });
     steps.push({ id: 'l2', role: 'line2', parentId: 'l1', ...placed.l2, d: dims2.d, h: dims2.h, s: blocks.l2.s });
-    accentSpans = placed.accents;
   } else {
-    const placed = placeOneLine(L, window1, rail1, accentWs);
+    const placed = placeOneLine(L, window1, rail1);
     steps.push({ id: 'l1', role: 'line1', parentId: null, ...placed.root, d: dims1.d, h: dims1.h, s: blocks.l1.s });
-    accentSpans = placed.accents;
   }
-  // 8. Accents.
-  accents.forEach((a, i) => {
-    blocks[a.id] = a.block;
-    steps.push({ id: a.id, role: 'accent', parentId: 'l1', ...accentSpans[i], d: a.d, h: a.h, s: a.block.s });
-  });
-
-  // 9. Bridges, cap-height notes and the stroke check.
+  // 8. Bridges, cap-height notes and the stroke check.
   let n = 0;
   for (const line of lines) {
     for (let i = 0; i < blocks[line.id].bridgeBars.length; i++) {

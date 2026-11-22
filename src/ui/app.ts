@@ -12,7 +12,9 @@ import './app.css';
 import { EMPTY_MESSAGE_NOTE, type Card } from '../core/build';
 import { decodeLink } from '../core/codec';
 import { loadFont as realLoadFont, type LoadedFont } from '../core/fonts';
+import type { Decor } from '../core/decor/types';
 import { defaultParams, type Params } from '../core/model';
+import { iconById, themeById } from '../themes';
 import { mainThreadBuilder, moduleWorkersSupported, workerBuilder, type Builder } from './builder';
 import { takeLinkFragment } from './linkFragment';
 import { CardScene } from '../view3d/scene';
@@ -23,7 +25,7 @@ import { checksCard } from './cards/checks';
 import { decorationsCard } from './cards/decorations';
 import { fontCard } from './cards/font';
 import { messageCard } from './cards/message';
-import { FontLoader, setAnalytics, type BuildState, type Ctx, type Host, type SceneLike, type View } from './context';
+import { FontLoader, setAnalytics, track, type BuildState, type Ctx, type Host, type SceneLike, type View } from './context';
 import { h, svgFrom } from './dom';
 import { exportModal } from './exportModal';
 import { exportNote } from './exportState';
@@ -132,6 +134,18 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   let requestSeq = 0;
   let shownSeq = 0;
 
+  /** The selected decoration; Flat view editing and the chips share it. */
+  let selected: string | null = null;
+  /** The decor from before the last theme change, style pick or Unpin all, for Undo; not in params or the link. */
+  let decorStash: Decor | null = null;
+  /** Committed moves this session; sent once when the page hides. */
+  let moves = 0;
+  const onPageHide = () => {
+    if (moves > 0) track('decor_item_moved', { count: moves });
+    moves = 0;
+  };
+  addEventListener('pagehide', onPageHide);
+
   // ---------------------------------------------------------------- notices
   const bannerText = h('p', { class: 'banner-text' });
   const bannerClose = h('button', { type: 'button', class: 'ghost icon-button', 'aria-label': DISMISS }, '×');
@@ -147,11 +161,37 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   bannerClose.addEventListener('click', () => (banner.hidden = true));
 
   // ---------------------------------------------------------------- parts
-  const ctx: Ctx = { host, params: () => params, update: (next, opts = {}) => update(next, opts.typing ?? false), fonts };
+  const ctx: Ctx = {
+    host,
+    params: () => params,
+    update: (next, opts = {}) => update(next, opts.typing ?? false, opts.undoable ?? false),
+    selection() {
+      // An id that no longer exists is dropped for good, so a recycled id can't revive it.
+      if (selected !== null && !params.decor.items.some((i) => i.id === selected)) selected = null;
+      return selected;
+    },
+    select(id) {
+      if (id === selected) return;
+      selected = id;
+      renderAll();
+    },
+    decorUndo() {
+      const restore = decorStash;
+      if (!restore) return;
+      selected = null;
+      // After a theme change the old style isn't one of this theme's: no tile could show it pressed,
+      // and the codec would drop it on reload. Keep the items and border, as a custom design.
+      const style = restore.style !== null && themeById(params.theme).styles.some((s) => s.id === restore.style) ? restore.style : null;
+      update({ ...params, decor: { ...restore, style } }, false, false);
+    },
+    canDecorUndo: () => decorStash !== null,
+    noteMove: () => void moves++,
+    fonts,
+  };
   const rail = themeRail(ctx);
   const cards = [messageCard(ctx), cardCard(ctx), fontCard(ctx), decorationsCard(ctx), checksCard(ctx), advancedCard(ctx)];
   const views: View[] = [rail, ...cards];
-  const canvas = createCanvas(d.createScene);
+  const canvas = createCanvas(d.createScene, ctx);
 
   /** Builds from the params current when the build finishes, never a snapshot from before a change. */
   const prepareExport = async (kind: 'blade' | 'laser' = previewTarget): Promise<Card> => {
@@ -196,7 +236,12 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   });
 
   // ---------------------------------------------------------------- layout
-  const files = fileActions({ host, params: () => params, open: (p) => update(p, false), notify, saveBlob: d.saveBlob });
+  /** A whole new design (a file, or `setParams`): ids are positional, so the selection goes. */
+  const load = (p: Params) => {
+    selected = null;
+    update(p, false);
+  };
+  const files = fileActions({ host, params: () => params, open: load, notify, saveBlob: d.saveBlob });
   const brand = h(
     'div',
     { class: 'brand' },
@@ -220,6 +265,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
   // ---------------------------------------------------------------- builds
   const renderAll = () => {
     for (const v of views) v.render(params, card, state);
+    canvas.showSelection();
     renderExport();
   };
 
@@ -239,10 +285,30 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
     canvas.show(next, geometry);
     canvas.setPlaceholder(next.notes.some((n) => n.message === EMPTY_MESSAGE_NOTE));
     renderAll();
+    if (geometry) warmIcons(next);
   }
 
-  function update(next: Params, typing: boolean) {
+  /**
+   * The worker builds the icons' polys in its own thread, so this one makes each the first time a
+   * drag or selection reads it (1 to 30 ms). Read them in idle time instead, one icon per callback.
+   */
+  function warmIcons(next: Card) {
+    const queue = [...new Set(next.decor.items.map((i) => i.icon))];
+    const idle = (f: () => void) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(f) : setTimeout(f, 50));
+    const step = () => {
+      const id = queue.shift();
+      if (destroyed || id === undefined) return;
+      void iconById(id).poly;
+      if (queue.length) idle(step);
+    };
+    if (queue.length) idle(step);
+  }
+
+  function update(next: Params, typing: boolean, undoable = false) {
     if (destroyed) return;
+    if (next.decor !== params.decor && JSON.stringify(next.decor) !== JSON.stringify(params.decor)) decorStash = undoable ? params.decor : null;
+    // Ids are positional (i1, i2, ...), so a replaced decor would put the selection on a different item.
+    if (undoable) selected = null;
     params = next;
     version++;
     clearTimeout(strokeTimer);
@@ -327,7 +393,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
       return card;
     },
     getParams: () => params,
-    setParams: (p) => update(p, false),
+    setParams: load,
     whenIdle: () =>
       new Promise<void>((resolve) => {
         waiters.push(resolve);
@@ -337,6 +403,7 @@ export function mountApp(root: HTMLElement, host: Host, hooks: AppHooks = {}, de
     stepImages: () => canvas.stepImages(),
     destroy() {
       destroyed = true;
+      removeEventListener('pagehide', onPageHide);
       cancelAnimationFrame(frame);
       [typingTimer, strokeTimer, autosaveTimer, bannerTimer, frameTimer].forEach((t) => clearTimeout(t));
       canvas.destroy();

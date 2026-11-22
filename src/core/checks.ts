@@ -4,6 +4,7 @@
  * thin strokes warn without blocking (R23).
  */
 import { area, difference, grow, intersect, offsetOpen, outerCount, union, type Poly } from '@kerfuffle/engine/geom';
+import { clear, pathShape, shapeOf } from './clearance';
 import type { Card } from './build';
 import { MARGIN_MM, PREVIEW_TOL_MM, WEB_MM, FRONT_GAP_MM } from './constants';
 import { foldU, frameAB } from './linkage';
@@ -84,14 +85,16 @@ function layoutCheck(card: Subject, p: Params): Check {
     if (edge < MARGIN_MM - EPS) return { ok: false, detail: `Strip ${s.id} is ${mm(edge)} from the card edge; it needs ${MARGIN_MM} mm.` };
   }
 
-  const r = (WEB_MM - 0.02) / 2;
+  // Exact distances, not grown zones: clipper2's offset can stall for minutes on some icon holes.
+  // Shapes are box-checked first, so a border's dozens of far-apart holes cost almost nothing.
+  const web = WEB_MM - 0.02;
   const cuts = [
-    ...card.inner.holes.map((h, i) => ({ name: `hole ${i + 1}`, zone: grow(h, r, PREVIEW_TOL_MM) })),
-    ...card.inner.openCuts.map((c, i) => ({ name: `cut ${i + 1}`, zone: offsetOpen(c, r, PREVIEW_TOL_MM) })),
+    ...card.inner.holes.map((h, i) => ({ name: `hole ${i + 1}`, shape: shapeOf(h) })),
+    ...card.inner.openCuts.map((c, i) => ({ name: `cut ${i + 1}`, shape: pathShape(c) })),
   ];
   for (let i = 0; i < cuts.length; i++) {
     for (let j = i + 1; j < cuts.length; j++) {
-      if (area(intersect(cuts[i].zone, cuts[j].zone)) > EPS) {
+      if (!clear(cuts[i].shape, cuts[j].shape, web)) {
         return { ok: false, detail: `${cuts[i].name} and ${cuts[j].name} are closer than ${WEB_MM} mm.` };
       }
     }

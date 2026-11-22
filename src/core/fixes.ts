@@ -18,7 +18,7 @@ export interface Note {
   action?: { kind: 'font'; family: string };
 }
 
-const NAMES: Record<string, string> = { l1: 'line 1', l2: 'line 2', a1: 'the first accent', a2: 'the second accent' };
+const NAMES: Record<string, string> = { l1: 'line 1', l2: 'line 2' };
 const name = (id: string): string => NAMES[id] ?? id;
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -109,11 +109,3 @@ export const fontMissingNote = (family: string, fallback: string): Note => ({
   level: 'info',
   message: `We couldn't load ${family}, so we used ${fallback}.`,
 });
-
-/**
- * Accents are decoration, like motifs (ruling R10): when they don't fit, they hide with this note,
- * not a fix, so there is nothing to undo.
- */
-export const ACCENTS_HIDDEN = 'We left out the pop-up decorations to give your message room.';
-
-export const accentsHiddenNote = (): Note => ({ level: 'info', message: ACCENTS_HIDDEN });

@@ -6,6 +6,5 @@ export const blank: Theme = {
   lines: ['HELLO', ''],
   font: 'Arvo',
   colours: { inner: '#ffffff', jacket: '#2f5d8a' },
-  accents: [],
-  motifs: [],
+  styles: [],
 };

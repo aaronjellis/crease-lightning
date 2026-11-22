@@ -214,3 +214,39 @@
 .with-unit { display: flex; align-items: center; gap: 6px; width: 120px; }
 .unit { color: var(--ink-3); font-size: 12px; font-weight: 500; }
 
+
+/* Decorations */
+.decor-styles { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.decor-style {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.decor-style:hover { border-color: var(--line-strong); }
+.decor-style[aria-pressed='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); color: var(--ink); background: #fff; }
+.decor-undo { margin: -2px 0 8px; }
+.decor-border { display: grid; gap: 8px; margin: 4px 0 14px; }
+.decor-pattern, .decor-size, .decor-find { display: grid; gap: 4px; }
+.decor-pattern select { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; color: var(--ink); }
+.decor-pattern select:disabled { opacity: 0.4; }
+.decor-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; padding: 0; list-style: none; }
+.decor-chip { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.decor-chip-select, .decor-pick { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--ink); font: inherit; }
+.decor-chip-select { min-height: 34px; padding: 0 4px 0 6px; border-radius: 999px 0 0 999px; font-size: 13px; }
+.decor-chip-select[aria-pressed='true'] { background: var(--ink); color: var(--surface); }
+.decor-chip-remove { width: 28px; min-height: 34px; border: 0; background: none; color: var(--ink-3); font-size: 18px; line-height: 1; border-radius: 0 999px 999px 0; }
+.decor-chip-remove:hover { color: var(--ink); }
+.decor-thumb { display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; }
+.decor-thumb svg { width: 100%; height: 100%; fill: currentColor; }
+.decor-size { margin: 4px 0 10px; }
+.decor-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.decor-add .modal-body { max-height: calc(100dvh - 64px); overflow: auto; }
+.decor-groups { display: grid; gap: 14px; }
+.decor-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
+.decor-pick { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; text-align: left; }
+.decor-pick:hover { border-color: var(--line-strong); }
+.decor-pick .decor-thumb { width: 26px; height: 26px; }

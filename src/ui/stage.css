@@ -112,10 +112,51 @@
 .flat-legend [data-legend='valley'] { stroke-dasharray: 5 3; }
 .flat-legend [data-legend='mountain'] { stroke-dasharray: 7 2 2 2; }
 .flat-legend [data-legend='perforation'] { stroke-dasharray: 4 2; }
+/* Decoration editing on the inner sheet (flatEdit.ts). --sheet-ink and --sheet-paper are set per figure.
+   A focused item keeps the app's focus ring, which browsers draw round its box. */
+.sheet-hint { display: block; margin-top: 2px; color: var(--ink-3); font-weight: 500; }
+.sheet svg[tabindex]:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.flat-view .decor-hit {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 10px;
+  pointer-events: all;
+  cursor: grab;
+  touch-action: none;
+}
+.sheet svg[data-dragging], .sheet svg[data-dragging] .decor-hit { cursor: grabbing; }
+.flat-view .decor-outline { fill: none; stroke: var(--sheet-ink); stroke-width: 2px; stroke-dasharray: 4 3; pointer-events: none; }
+.flat-view .decor-ghost { stroke-width: 2px; pointer-events: none; }
+.flat-view .decor-ghost[data-state='ok'] { fill: color-mix(in srgb, var(--sheet-ink) 18%, transparent); stroke: var(--sheet-ink); }
+.flat-view .decor-ghost[data-state='blocked'] { fill: rgb(176 39 31 / 0.22); stroke: #d9342b; }
+.sheet-art { position: relative; }
+.decor-remove {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1;
+  transform: translate(-30%, -70%);
+}
+.decor-remove:hover { border-color: var(--ink); }
+.flat-view .decor-handle { fill: var(--sheet-ink); stroke: var(--sheet-paper); stroke-width: 2px; cursor: nwse-resize; touch-action: none; }
+/* Small screens resize with the rail's size slider. */
+@media (max-width: 767.98px) {
+  .flat-view .decor-handle { display: none; }
+}
 .swatch-hole { width: 14px; height: 14px; border-radius: 4px; background: var(--show-through, var(--brand-a)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15); }
 
 /* ------------------------------------------------------------ export modal */
-.export-modal {
+.export-modal,
+.decor-add {
   width: min(640px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   padding: 0;
@@ -125,7 +166,8 @@
   color: var(--ink);
   box-shadow: 0 24px 64px rgb(28 26 23 / 0.28);
 }
-.export-modal::backdrop { background: rgb(28 26 23 / 0.45); backdrop-filter: blur(2px); }
+.export-modal::backdrop,
+.decor-add::backdrop { background: rgb(28 26 23 / 0.45); backdrop-filter: blur(2px); }
 .modal-body { display: grid; gap: 16px; padding: 22px 24px 24px; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; }
 .modal-head h2 { font: 700 22px/1.2 var(--display); }

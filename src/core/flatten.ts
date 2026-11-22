@@ -19,7 +19,7 @@ import { bounds, difference, union, type Poly, type Pt } from '@kerfuffle/engine
 import { windowY0, type Layout } from './fit';
 import { foldU } from './linkage';
 import { cardDims, type Params } from './model';
-import { placeMotifs } from './motifs';
+import { placeDecor, type DecorLayout } from './decor/place';
 import type { FoldKind, PanelFrame, StepSpec } from './types';
 import type { Theme } from '../themes';
 
@@ -35,7 +35,7 @@ export interface Piece {
   widthMm: number;
   heightMm: number;
   outline: Poly;
-  /** Closed cut-throughs: each block's window waste (in step order), then the motifs. */
+  /** Closed cut-throughs: each block's window waste (in step order), then the border tiles, then the illustrations. */
   holes: Poly[];
   /** The strip cuts, two per step, each from B to A. */
   openCuts: Pt[][];
@@ -57,10 +57,12 @@ export interface Flat {
   inner: Piece;
   jacket: Piece;
   panels: Panel[];
+  /** The decorations, in flat coordinates. */
+  decor: DecorLayout;
 }
 
 const EPS = 1e-6;
-/** Half-width of the strip that stands in for a fold line in the motifs' keep-out. */
+/** Half-width of the strip that stands in for a fold line in the decorations' keep-out. */
 const FOLD_KEEP_MM = 0.01;
 
 type Span = [number, number];
@@ -101,7 +103,7 @@ interface FlatFold {
   span: Span;
 }
 
-export function flatten(layout: Layout, p: Params, theme: Theme): Flat {
+export function flatten(layout: Layout, p: Params, _theme: Theme): Flat {
   const { W, L } = cardDims(p);
   const steps = layout.steps;
   const byId = new Map(steps.map((s) => [s.id, s]));
@@ -146,16 +148,17 @@ export function flatten(layout: Layout, p: Params, theme: Theme): Flat {
     for (const y of [y0, y1]) openCuts.push([{ x: g.B, y }, { x: g.A, y }]);
   }
 
-  // Holes: window waste, then motifs clear of every footprint and fold.
+  // Holes: window waste, then decorations clear of every footprint and fold.
   const footprints = union(geo.map(stripOf));
   const waste = geo
     .map((g) => (layout.blocks[g.step.id] ? toFlat(layout.blocks[g.step.id].waste, g) : []))
     .filter((h) => h.length > 0);
   const keepOut = union([footprints, ...folds.map((f) => rect(f.u - FOLD_KEEP_MM, f.span[0], f.u + FOLD_KEEP_MM, f.span[1]))]);
-  const motifs = p.motifs ? placeMotifs(theme, keepOut, W, L) : [];
+  const decor = placeDecor(p.decor, keepOut, W, L);
+  const cuts = [...decor.border, ...decor.items.map((it) => it.poly)];
 
   // Panels.
-  const pageCut = union([footprints, ...motifs]);
+  const pageCut = union([footprints, ...cuts]);
   const panels: Panel[] = [
     { id: 'page:back', stepId: null, poly: difference(rect(-W, 0, 0, L), pageCut), frame: { kind: 'back' }, layer: 0 },
     { id: 'page:base', stepId: null, poly: difference(rect(0, 0, W, L), pageCut), frame: { kind: 'base' }, layer: 0 },
@@ -180,7 +183,7 @@ export function flatten(layout: Layout, p: Params, theme: Theme): Flat {
     widthMm: 2 * W,
     heightMm: L,
     outline: rect(0, 0, 2 * W, L),
-    holes: [...waste, ...motifs].map(toSheet),
+    holes: [...waste, ...cuts].map(toSheet),
     openCuts: openCuts.map((c) => c.map((q) => ({ x: q.x + W, y: q.y }))),
     folds: folds.map((f) => ({ kind: f.kind, path: [{ x: f.u + W, y: f.span[0] }, { x: f.u + W, y: f.span[1] }] })),
   };
@@ -197,5 +200,5 @@ export function flatten(layout: Layout, p: Params, theme: Theme): Flat {
     folds: [{ kind: 'valley', path: [{ x: W + o, y: 0 }, { x: W + o, y: L + 2 * o }] }],
   };
 
-  return { inner, jacket, panels };
+  return { inner, jacket, panels, decor };
 }

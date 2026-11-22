@@ -2,13 +2,17 @@
  * The spec's random-message test (I5): seeded messages of letters, digits, punctuation and lowercase
  * with descenders, 20+ characters among them, at random sizes, spines and fonts, through `build()` with
  * the stroke check off. After the fit's own fixes no check fails, every fix is a known kind, and
- * every size is a finite, positive number.
+ * every size is a finite, positive number. Decorations are random too (a style or none, sometimes
+ * another border, up to 20 added icons, random pins and sizes), from their own seeded sequence.
  */
 import { describe, expect, test } from 'vitest';
 import { bounds } from '@kerfuffle/engine/geom';
 import { build, type Card } from '../src/core/build';
+import { MAX_ITEM_MM } from '../src/core/codec';
+import { addItem, decorFromStyle, moveItem, resizeItem } from '../src/core/decor/model';
+import type { Decor } from '../src/core/decor/types';
 import { applyTheme, BIRTHDAY_DEFAULTS, CARD_SIZES, defaultParams, type CardSize, type Params, type Spacing } from '../src/core/model';
-import { THEMES } from '../src/themes';
+import { BORDERS, ICONS, THEMES, iconById, type Theme } from '../src/themes';
 import { testFonts } from './helpers/fonts';
 
 const fonts = testFonts();
@@ -48,7 +52,28 @@ function message(r: () => number, length: number): string {
   return out;
 }
 
-function randomParams(r: () => number): Params {
+const pick = <T,>(r: () => number, xs: readonly T[]): T => xs[Math.floor(r() * xs.length)];
+
+/** A random decor for the theme: a style or none, sometimes another border, up to 20 added icons, random pins and sizes. */
+function randomDecor(r: () => number, theme: Theme): Decor {
+  const styleId = pick(r, [...theme.styles.map((s) => s.id), null]);
+  let d = decorFromStyle(theme, styleId, Math.floor(r() * 2 ** 32));
+  const b = r();
+  if (b < 0.3) d = { ...d, border: pick(r, BORDERS).id };
+  else if (b < 0.4) d = { ...d, border: null };
+  const adds = Math.floor(r() * 21);
+  for (let k = 0; k < adds; k++) d = addItem(d, pick(r, ICONS).id);
+  for (const it of d.items) {
+    if (r() < 0.3) d = moveItem(d, it.id, { page: r() < 0.5 ? 'back' : 'base', u: r(), v: r() });
+    if (r() < 0.3) {
+      const min = iconById(it.icon).minHeightMm;
+      d = resizeItem(d, it.id, Math.min(MAX_ITEM_MM, min + r() * 15));
+    }
+  }
+  return d;
+}
+
+function randomParams(r: () => number, dr: () => number): Params {
   const theme = THEMES[Math.floor(r() * THEMES.length)];
   const base = applyTheme(P0, theme, BIRTHDAY_DEFAULTS);
   const long = r() < 0.4;
@@ -64,7 +89,7 @@ function randomParams(r: () => number): Params {
     spacing: SPACINGS[Math.floor(r() * SPACINGS.length)],
     size: SIZES[Math.floor(r() * SIZES.length)],
     spine: r() < 0.5 ? 'long' : 'short',
-    accents: r() < 0.7,
+    decor: r() < 0.7 ? randomDecor(dr, theme) : { ...base.decor, style: null, border: null, items: [] },
   };
 }
 
@@ -100,12 +125,13 @@ describe('random messages (I5)', () => {
   for (let batch = 0; batch < BATCHES; batch++) {
     test(`batch ${batch + 1} (seed ${20261121 + batch}): no check fails after fixes`, () => {
       const r = rng(20261121 + batch);
+      const dr = rng(20261122 + 1000 * batch);
       const bad: string[] = [];
       for (let i = 0; i < PER_BATCH; i++) {
-        const p = randomParams(r);
+        const p = randomParams(r, dr);
         const card = build(p, { fonts }, 'blade', { strokeCheck: false });
         const found = problems(card);
-        const label = `${p.theme} ${p.size} ${p.spine} ${p.font} ${p.spacing} caps=${p.allCaps} "${p.line1}" / "${p.line2}"`;
+        const label = `${p.theme} ${p.size} ${p.spine} ${p.font} ${p.spacing} caps=${p.allCaps} "${p.line1}" / "${p.line2}" decor ${JSON.stringify(p.decor)}`;
         if (found.length) bad.push(`${label}: ${found.join('; ')}`);
       }
       expect(bad).toEqual([]);

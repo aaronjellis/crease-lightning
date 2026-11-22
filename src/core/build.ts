@@ -5,6 +5,7 @@
 import { pathLength } from '@kerfuffle/engine/geom';
 import { runChecks, type CheckResult } from './checks';
 import { MAT_USABLE_MM } from './constants';
+import type { DecorLayout } from './decor/place';
 import { fitLayout, type Fix, type Layout, type Note } from './fit';
 import { flatten, type Panel, type Piece } from './flatten';
 import type { FontSet } from './fonts';
@@ -19,6 +20,8 @@ export interface Card {
   inner: Piece;
   jacket: Piece;
   panels: Panel[];
+  /** The decorations as placed for this build, in flat coordinates. */
+  decor: DecorLayout;
   checks: CheckResult[];
   fixes: Fix[];
   notes: Note[];
@@ -34,6 +37,14 @@ export interface BuildOptions {
 
 export const EMPTY_MESSAGE_NOTE = 'Type a message to make your card.';
 export const MAT_NOTE = 'This card needs a 12 × 24 in mat.';
+
+/** The info note for illustrations that fit nowhere. */
+export const missingNote = (n: number): string =>
+  n === 1 ? "1 illustration didn't fit. Remove one or try a bigger card." : `${n} illustrations didn't fit. Remove some or try a bigger card.`;
+
+/** The info note for pinned illustrations shown away from their pins. */
+export const displacedNote = (n: number): string =>
+  n === 1 ? "1 illustration is out of its spot until there's room." : `${n} illustrations are out of their spots until there's room.`;
 
 /** Whether the inner sheet or the jacket, open, is wider or taller than a 12 × 12 in mat can cut (M9). */
 export const needsBigMat = (card: Pick<Card, 'inner' | 'jacket'>): boolean =>
@@ -67,13 +78,17 @@ export function build(
   const shown: Params = blankMessage ? { ...p, line1: theme.lines[0], line2: theme.lines[1] } : p;
 
   const layout = fitLayout(shown, assets.fonts, theme, target, { strokeCheck });
-  const { inner, jacket, panels } = flatten(layout, shown, theme);
+  const { inner, jacket, panels, decor } = flatten(layout, shown, theme);
 
   const notes: Note[] = [...layout.notes];
   if (blankMessage) notes.unshift({ level: 'warn', message: EMPTY_MESSAGE_NOTE });
   if (target === 'blade' && needsBigMat({ inner, jacket })) {
     notes.push({ level: 'info', message: MAT_NOTE });
   }
+  // Decoration notes are info only: they never block export or add a fix.
+  const displaced = decor.items.filter((it) => it.displaced).length;
+  if (decor.missing.length) notes.push({ level: 'info', message: missingNote(decor.missing.length) });
+  if (displaced) notes.push({ level: 'info', message: displacedNote(displaced) });
 
   const partial = {
     params: p,
@@ -81,6 +96,7 @@ export function build(
     inner,
     jacket,
     panels,
+    decor,
     fixes: layout.fixes,
     notes,
     stats: {

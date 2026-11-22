@@ -2,9 +2,9 @@ import { describe, expect, test } from 'vitest';
 import { area, bounds, difference, grow, intersect, offsetOpen, union, type Poly, type Pt } from '@kerfuffle/engine/geom';
 import { fitLayout, windowY0, type Layout } from '../src/core/fit';
 import { flatten, type Fold, type Piece } from '../src/core/flatten';
-import { placeMotifs } from '../src/core/motifs';
 import { foldU } from '../src/core/linkage';
 import { cardDims, defaultParams, type Params } from '../src/core/model';
+import { decorFromStyle } from '../src/core/decor/model';
 import { MARGIN_MM, PREVIEW_TOL_MM, WEB_MM } from '../src/core/constants';
 import type { StepSpec } from '../src/core/types';
 import { themeById } from '../src/themes';
@@ -14,6 +14,7 @@ const fonts = testFonts();
 const birthday = themeById('birthday');
 const blank = themeById('blank');
 const P0 = defaultParams('en-US');
+const NO_DECOR: Params = { ...P0, decor: { ...P0.decor, style: null, border: null, items: [] } };
 const fit = (p: Params = P0, theme = birthday): Layout => fitLayout(p, fonts, theme, 'blade', { strokeCheck: false });
 
 const layout = fit();
@@ -54,11 +55,12 @@ const mapBlock = (poly: Poly, s: StepSpec): Poly => {
 };
 const footprints = union(layout.steps.map((s) => stripRect(s, layout.steps)));
 const wasteOf = (steps: StepSpec[]) => union(steps.map((s) => mapBlock(layout.blocks[s.id].waste, s)));
+/** The holes outside every strip: the decorations. */
 const motifHoles = (piece: Piece) => piece.holes.filter((h) => area(intersect(h, footprints)) < 1e-6);
 
 describe('flatten: Birthday 5 × 7 default', () => {
-  test('the layout is two lines with both accents', () => {
-    expect(layout.steps.map((s) => s.id).sort()).toEqual(['a1', 'a2', 'l1', 'l2']);
+  test('the layout is two lines and nothing else', () => {
+    expect(layout.steps.map((s) => s.id).sort()).toEqual(['l1', 'l2']);
   });
 
   test('the inner sheet is 254 × 178', () => {
@@ -127,7 +129,7 @@ describe('flatten: Birthday 5 × 7 default', () => {
     const { A } = foldU(root, layout.steps);
     const spans = foldSpans(inner, 'valley', A + W);
     const kids = children(root.id);
-    expect(kids.length).toBe(3);
+    expect(kids.map((k) => k.id)).toEqual(['l2']);
     for (const k of kids) {
       for (const y of [k.y0 + 0.1, (k.y0 + k.y1) / 2, k.y1 - 0.1]) expect(covers(spans, y), `${k.id} at ${y}`).toBe(false);
     }
@@ -198,9 +200,10 @@ describe('flatten: Birthday 5 × 7 default', () => {
     }
   });
 
-  test('motifs keep a web from every footprint, fold, other motif, and the edge margin', () => {
+  test('decorations keep a web from every footprint, fold, other decoration, and the edge margin', () => {
     const motifs = motifHoles(inner);
-    expect(motifs.length).toBe(10);
+    expect(motifs.length).toBe(out.decor.border.length + out.decor.items.length);
+    expect(out.decor.items).toHaveLength(10);
     const grown = motifs.map((m) => grow(m, WEB_MM - 0.02, PREVIEW_TOL_MM));
     const foldLines = union(inner.folds.map((f) => offsetOpen(f.path, 0.01, PREVIEW_TOL_MM)));
     grown.forEach((g, i) => {
@@ -217,32 +220,28 @@ describe('flatten: Birthday 5 × 7 default', () => {
     });
   });
 
-  test('back-top motifs sit on the back page, base-front motifs on the base page', () => {
-    const motifs = motifHoles(inner);
-    const back = motifs.filter((m) => bounds(m)!.x + bounds(m)!.w < W);
-    const base = motifs.filter((m) => bounds(m)!.x > W);
-    expect(back).toHaveLength(6);
-    expect(base).toHaveLength(4);
-    // Each band hugs its far edge: the margin line.
-    expect(Math.min(...back.map((m) => bounds(m)!.x))).toBeCloseTo(MARGIN_MM, 1);
-    expect(Math.max(...base.map((m) => bounds(m)!.x + bounds(m)!.w))).toBeCloseTo(2 * W - MARGIN_MM, 1);
+  test('the decoration holes are the placed border tiles, then the items, after the window waste', () => {
+    const cuts = [...out.decor.border, ...out.decor.items.map((it) => it.poly)];
+    expect(out.decor.items.map((it) => it.id)).toEqual(P0.decor.items.map((it) => it.id));
+    expect(inner.holes.slice(layout.steps.length)).toEqual(cuts.map((c) => c.map((r) => r.map((q) => ({ x: q.x + W, y: q.y })))));
   });
 
-  test('with motifs off there are no motif holes', () => {
-    const off = flatten(layout, { ...P0, motifs: false }, birthday);
+  test('with no items there are no decoration holes', () => {
+    const off = flatten(layout, NO_DECOR, birthday);
     expect(motifHoles(off.inner)).toHaveLength(0);
     expect(off.inner.holes).toHaveLength(layout.steps.length);
     expect(symDiff(union(off.inner.holes), wasteOf(layout.steps))).toBeLessThan(1e-3);
   });
 
-  test('the Blank theme has no motif holes', () => {
-    const l = fit(P0, blank);
-    expect(flatten(l, P0, blank).inner.holes).toHaveLength(l.steps.length);
+  test('the Blank theme has no decoration holes', () => {
+    const p = { ...P0, decor: decorFromStyle(blank, null, 1) };
+    const l = fit(p, blank);
+    expect(flatten(l, p, blank).inner.holes).toHaveLength(l.steps.length);
   });
 });
 
 describe('flatten: other layouts', () => {
-  test('one line: the spine stops at the root and the A valley at the accents', () => {
+  test('one line: the spine stops at the root and the A valley at the children', () => {
     const p = { ...P0, line2: '', line1: 'HELLO' };
     const l = fit(p);
     expect(l.steps.some((s) => s.role === 'line2')).toBe(false);
@@ -256,7 +255,7 @@ describe('flatten: other layouts', () => {
 
   test('an empty layout is two blank pages with a full spine', () => {
     const empty: Layout = { steps: [], blocks: {}, lines: [], fixes: [], notes: [] };
-    const f = flatten(empty, { ...P0, motifs: false }, birthday);
+    const f = flatten(empty, NO_DECOR, birthday);
     expect(f.inner.holes).toEqual([]);
     expect(f.inner.openCuts).toEqual([]);
     expect(f.inner.folds).toHaveLength(1);
@@ -278,7 +277,7 @@ describe('flatten: other layouts', () => {
     expect(() => flatten(tall, P0, birthday)).not.toThrow();
   });
 
-  test('A6 and short spine build with every motif clear of the strips', () => {
+  test('A6 and short spine build with every decoration clear of the strips', () => {
     for (const over of [{ size: 'a6' as const }, { spine: 'short' as const }, { size: 'a2' as const }]) {
       const p = { ...P0, ...over };
       const l = fit(p);
@@ -293,37 +292,5 @@ describe('flatten: other layouts', () => {
       expect(motifs.length, JSON.stringify(over)).toBeGreaterThan(0);
       for (const m of motifs) expect(area(intersect(grow(m, WEB_MM - 0.02, PREVIEW_TOL_MM), fp))).toBeLessThan(1e-6);
     }
-  });
-});
-
-describe('placeMotifs', () => {
-  const none: Poly = [];
-
-  test('with nothing in the way, every motif goes in at its largest size', () => {
-    const placed = placeMotifs(birthday, none, W, L);
-    expect(placed).toHaveLength(10);
-    const tallest = Math.max(...placed.map((m) => bounds(m)!.w));
-    // Height is along u (the sheet's x): the confetti's largest is 14 mm.
-    expect(tallest).toBeCloseTo(14, 1);
-  });
-
-  test('a motif short of room shrinks, but never under its minimum', () => {
-    // Leave the back-top band only 11 mm deep: room for confetti between 9 and 14 mm.
-    const wall = [[{ x: -W + MARGIN_MM + 11 + WEB_MM, y: 0 }, { x: -1, y: 0 }, { x: -1, y: L }, { x: -W + MARGIN_MM + 11 + WEB_MM, y: L }]] as Pt[][];
-    const placed = placeMotifs(birthday, wall, W, L).filter((m) => bounds(m)!.x < 0);
-    expect(placed.length).toBe(6);
-    for (const m of placed) {
-      expect(bounds(m)!.w).toBeLessThanOrEqual(11 + 1e-6);
-      expect(bounds(m)!.w).toBeGreaterThanOrEqual(9 - 1e-6);
-    }
-  });
-
-  test('a motif with no room at its minimum drops', () => {
-    const wall = [[{ x: -W + MARGIN_MM + 8 + WEB_MM, y: 0 }, { x: -1, y: 0 }, { x: -1, y: L }, { x: -W + MARGIN_MM + 8 + WEB_MM, y: L }]] as Pt[][];
-    expect(placeMotifs(birthday, wall, W, L).filter((m) => bounds(m)!.x < 0)).toHaveLength(0);
-  });
-
-  test('Blank places nothing', () => {
-    expect(placeMotifs(blank, none, W, L)).toEqual([]);
   });
 });

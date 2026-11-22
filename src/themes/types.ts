@@ -1,30 +1,29 @@
 import type { Poly } from '@kerfuffle/engine/geom';
 import type { ThemeId } from '../core/model';
 
-export type SlotId =
-  | 'back-top-left'
-  | 'back-top-right'
-  | 'back-top-row'
-  | 'base-front-left'
-  | 'base-front-right'
-  | 'base-front-row';
-
 /** A cut-through icon. `poly` is one mm tall with its bottom on y = 0 and its left on x = 0; y points up. */
 export interface Icon {
   id: string;
+  /** The human name the picker shows, such as "Graduation cap". */
+  name: string;
   poly: Poly;
   /** The smallest height, in mm, at which the icon still cuts cleanly. */
   minHeightMm: number;
+  /** The size range, in mm, an icon added from the picker starts with. The low end is at least `minHeightMm`. */
+  defaultMm: [number, number];
+  /** The themes the icon suits, plus `everyday`: the Add picker's groups. */
+  themes: (ThemeId | 'everyday')[];
   source: string;
   licence: string;
 }
 
-export interface Motif {
-  icon: string;
-  slot: SlotId;
-  minMm: number;
-  maxMm: number;
-  count: number;
+/** A theme's ready-made set of decorations: data, no code. */
+export interface Style {
+  id: string;
+  name: string;
+  /** A border pattern id, or null for none. */
+  border: string | null;
+  items: { icon: string; count: number; minMm: number; maxMm: number }[];
 }
 
 export interface Theme {
@@ -33,7 +32,6 @@ export interface Theme {
   lines: [string, string];
   font: string;
   colours: { inner: string; jacket: string };
-  /** The two pop-up icons that stand on the steps, or none. */
-  accents: [string, string] | [];
-  motifs: Motif[];
+  /** Two or three styles; the first is the default. Blank has none. */
+  styles: Style[];
 }

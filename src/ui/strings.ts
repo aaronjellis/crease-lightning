@@ -56,6 +56,8 @@ export const FLAT = {
   perforated: 'Perforated fold',
   showThrough: 'Jacket shows through',
   label: (what: string, w: number, h: number) => `${what}, ${Math.round(w)} × ${Math.round(h)} mm`,
+  editHint: 'Drag an illustration to move it. Select one, then use the arrow keys to move it, + and − to resize it, or Delete to remove it.',
+  resize: 'Resize illustration',
 };
 
 export const MESSAGE = {
@@ -93,11 +95,16 @@ export const SPACING: Record<Spacing, string> = { tight: 'Tight', normal: 'Norma
 
 export const DECORATIONS = {
   title: 'Decorations',
-  accents: 'Pop-up icons',
-  accentsHint: 'Icons that stand up beside your message.',
-  motifs: 'Cut-out shapes',
-  motifsHint: 'Small shapes cut into the pages.',
-  none: (theme: string) => `The ${theme} theme has no decorations.`,
+  style: 'Style', none: 'None', custom: (name: string) => `${name} (custom)`, customLabel: 'Custom',
+  border: 'Border', borderPattern: 'Pattern',
+  items: 'Illustrations', add: 'Add', addTitle: 'Add an illustration',
+  addFull: (max: number) => `A card holds up to ${max} illustrations. Remove one to add another.`,
+  shuffle: 'Shuffle', unpinAll: 'Unpin all', undo: 'Undo',
+  size: 'Size', remove: (name: string) => `Remove ${name}`,
+  empty: 'No illustrations. Add one, or pick a style.',
+  find: 'Find',
+  everyday: 'Everyday',
+  noMatch: 'No illustrations match.',
 };
 
 export const CHECKS = {

@@ -5,7 +5,7 @@ import { cardDims, CARD_SIZES, defaultParams, type CardSize, type Params } from 
 import { closedReach } from '../src/core/linkage';
 import { measureLine } from '../src/core/text';
 import { CLEARANCE_MM, FRONT_GAP_MM, MARGIN_MM, RAIL_MM, STRONG_CAP_MM, WARN_CAP_MM, WEB_MM } from '../src/core/constants';
-import { ACCENTS_HIDDEN, LINE2_DROPPED } from '../src/core/fixes';
+import { LINE2_DROPPED } from '../src/core/fixes';
 import { THEMES, themeById } from '../src/themes';
 import { arvo, rokkitt, testFonts } from './helpers/fonts';
 import type { FontSet } from '../src/core/fonts';
@@ -33,8 +33,8 @@ function expectConstraints(l: Layout, p: Params, label: string, railOf?: (id: st
   for (const s of l.steps) {
     const at = `${label} ${s.id}`;
     for (const v of [s.d, s.h, s.s, s.y0, s.y1, l.blocks[s.id]?.capMm]) expect(Number.isFinite(v), at).toBe(true);
-    if (s.role !== 'accent') expect(l.blocks[s.id].capMm, at).toBeGreaterThanOrEqual(CAP_FLOOR_MM - EPS);
-    if (s.role !== 'accent' && l.blocks[s.id].capMm < STRONG_CAP_MM) {
+    expect(l.blocks[s.id].capMm, at).toBeGreaterThanOrEqual(CAP_FLOOR_MM - EPS);
+    if (l.blocks[s.id].capMm < STRONG_CAP_MM) {
       expect(l.notes.some((n) => n.level === 'strong'), `${at} strong note`).toBe(true);
     }
     expect(s.d, at).toBeGreaterThan(0);
@@ -77,11 +77,8 @@ describe('fitLayout', () => {
     expect(l.lines).toEqual(['HAPPY BIRTHDAY', 'SAM']);
     expect(l.blocks.l1.capMm).toBeGreaterThanOrEqual(9);
     expect(l.blocks.l2.capMm).toBeGreaterThanOrEqual(9);
-    // Accents stand as children of line 1, flanking line 2.
-    expect(l.steps.map((s) => s.id)).toEqual(['l1', 'l2', 'a1', 'a2']);
-    expect(l.steps.slice(1).every((s) => s.parentId === 'l1')).toBe(true);
-    expect(step(l, 'a1')!.y1).toBeLessThanOrEqual(step(l, 'l2')!.y0 - WEB_MM + EPS);
-    expect(step(l, 'a2')!.y0).toBeGreaterThanOrEqual(step(l, 'l2')!.y1 - WEB_MM + EPS);
+    // The message steps are the only folds.
+    expect(l.steps.map((s) => s.id)).toEqual(['l1', 'l2']);
     expectConstraints(l, defaultParams('en-US'), 'birthday default');
   });
 
@@ -115,7 +112,7 @@ describe('fitLayout', () => {
               // The stroke check has its own test; skipping it here keeps the matrix fast.
               const l = fitLayout(p, fonts, theme, 'blade', { strokeCheck: false });
               expectConstraints(l, p, `${theme.id} ${size} ${spine} ${lines} ${font}`);
-              // Hidden accents are a note, not a fix (R10), so every default builds with zero fixes.
+              // Every default builds with zero fixes.
               expect(l.fixes, `${theme.id} ${size} ${spine} ${lines} ${font}`).toEqual([]);
               n++;
             }
@@ -225,58 +222,28 @@ describe('fitLayout', () => {
     expect(l.notes.some((n) => n.level === 'warn' && /line 1/i.test(n.message))).toBe(true);
   });
 
-  test('accents hide with an info note, not a fix, when the riser is too narrow (R10)', () => {
-    const hidden = (l: Layout) => l.notes.filter((n) => n.message === ACCENTS_HIDDEN);
-    const p = base({ size: 'a2', line2: 'ALEXANDRA JONES' });
-    const l = fitLayout(p, fonts, birthday, 'blade');
-    expect(l.steps.some((s) => s.role === 'accent')).toBe(false);
-    expect(l.blocks.a1).toBeUndefined();
-    expect(l.blocks.a2).toBeUndefined();
-    expect(l.fixes.filter((f) => f.id.startsWith('accent'))).toEqual([]);
-    expect(hidden(l)).toEqual([{ level: 'info', message: ACCENTS_HIDDEN }]);
-    // Hidden accents give line 2 all the room it would have with accents off.
-    const off = fitLayout({ ...p, accents: false }, fonts, birthday, 'blade');
-    expect(l.blocks.l2.capMm).toBeCloseTo(off.blocks.l2.capMm, 6);
-    expect(hidden(off)).toEqual([]);
-    expectConstraints(l, p, 'a2 long line 2');
-
-    // A short spine can't hold the default accents beside SAM either: still zero fixes.
-    const short = fitLayout(base({ spine: 'short' }), fonts, birthday, 'blade');
-    expect(short.steps.some((s) => s.role === 'accent')).toBe(false);
-    expect(short.fixes).toEqual([]);
-    expect(hidden(short)).toHaveLength(1);
-
-    // The 5 x 7 default keeps them, with no note.
-    expect(hidden(fitLayout(defaultParams('en-US'), fonts, birthday, 'blade'))).toEqual([]);
-  });
-
-  test('one-line accents sit at the riser ends, clear of the text in front view', () => {
-    const p = base({ line2: '' });
-    const l = fitLayout(p, fonts, birthday, 'blade');
-    expect(l.lines).toEqual(['HAPPY BIRTHDAY']);
-    expect(l.fixes).toEqual([]);
-    const [l1, a1, a2] = ['l1', 'a1', 'a2'].map((id) => step(l, id)!);
-    expect(a1.y0).toBeCloseTo(l1.y0 + RAIL_MM, 6);
-    expect(a2.y1).toBeCloseTo(l1.y1 - RAIL_MM, 6);
-    expectConstraints(l, p, 'one line accents');
-  });
-
-  test('accents off, or a theme without accents, adds no accent steps and no fix', () => {
-    const off = fitLayout(base({ accents: false }), fonts, birthday, 'blade');
-    expect(off.steps.map((s) => s.id)).toEqual(['l1', 'l2']);
-    expect(off.fixes).toEqual([]);
-    const none = fitLayout(base({ theme: 'blank', line1: 'HELLO', line2: '' }), fonts, blank, 'blade');
-    expect(none.steps.map((s) => s.id)).toEqual(['l1']);
-  });
-
-  test('accent icons stand at least their minimum height', () => {
-    for (const size of Object.keys(CARD_SIZES) as CardSize[]) {
-      const l = fitLayout(base({ size }), fonts, birthday, 'blade');
-      for (const id of ['a1', 'a2']) {
-        if (!l.blocks[id]) continue;
-        expect(l.blocks[id].capMm, `${size} ${id}`).toBeGreaterThanOrEqual(18 - EPS);
+  test('no theme makes pop-up accent steps, and nothing tells the user about hidden ones', () => {
+    const OLD_NOTE = 'We left out the pop-up decorations to give your message room.';
+    for (const theme of THEMES) {
+      for (const line2 of [false, true]) {
+        const p = base({ theme: theme.id, size: '5x7', line1: theme.lines[0], line2: line2 ? theme.lines[1] || 'SAM' : '' });
+        const l = fitLayout(p, fonts, theme, 'blade', { strokeCheck: false });
+        const at = `${theme.id} ${line2 ? 'two' : 'one'} lines`;
+        expect(l.steps.every((s) => (s.role as string) !== 'accent'), at).toBe(true);
+        expect(l.steps.map((s) => s.id), at).toEqual(line2 ? ['l1', 'l2'] : ['l1']);
+        expect(l.notes.some((n) => n.message === OLD_NOTE), at).toBe(false);
+        expect(l.fixes, at).toEqual([]);
       }
     }
+  });
+
+  test('line 2 is centred on the card and uses its full available length', () => {
+    const p = base({ size: 'a2', line2: 'ALEXANDRA JONES' });
+    const { L } = cardDims(p);
+    const l = fitLayout(p, fonts, birthday, 'blade');
+    const l2 = step(l, 'l2')!;
+    expect(Math.abs((l2.y0 + l2.y1) / 2 - L / 2)).toBeLessThan(1e-6);
+    expect(l.fixes).toEqual([]);
   });
 
   test('rails below 5 mm are widened with rail:<id>', () => {
@@ -425,7 +392,7 @@ describe('fitLayout', () => {
   describe('wide rails and clearance (codec-valid Advanced values)', () => {
     const wide = (size: CardSize, railMm: number, clearanceMm: number, over: Partial<Params> = {}) =>
       withAdvanced(base({ size, spine: 'short', ...over }), { railMm, clearanceMm });
-    /** Rails listed as narrowed are 5 mm (accents always use at least 5 mm); the rest keep the user's width. */
+    /** Rails listed as narrowed are 5 mm; the rest keep the user's width. */
     const railsOf = (p: Params, narrowed: string[]) => (id: string) =>
       narrowed.includes(id) || id.startsWith('a') ? RAIL_MM : p.advanced.railMm;
 

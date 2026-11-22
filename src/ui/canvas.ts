@@ -4,7 +4,7 @@
  */
 import type { Card } from '../core/build';
 import { FOLD_STEPS } from '../core/foldSteps';
-import type { SceneLike } from './context';
+import type { Ctx, SceneLike } from './context';
 import { h } from './dom';
 import { flatView } from './flatView';
 import { LOADING_FONTS, NO_3D, PLACEHOLDER_PREVIEW, TABS, VIEW } from './strings';
@@ -20,10 +20,12 @@ export interface CanvasApi {
   setPlaceholder(on: boolean): void;
   /** One PNG per fold step, from the 3D scene; empty when 3D isn't available. */
   stepImages(): Promise<{ step: string; png: Uint8Array }[]>;
+  /** Shows the current decoration selection on the Flat view (the rail may have changed it). */
+  showSelection(): void;
   destroy(): void;
 }
 
-export function createCanvas(createScene: (canvas: HTMLCanvasElement) => SceneLike): CanvasApi {
+export function createCanvas(createScene: (canvas: HTMLCanvasElement) => SceneLike, ctx: Ctx): CanvasApi {
   // Tabs.
   const tabButton = (tab: Tab, text: string) =>
     h('button', { type: 'button', role: 'tab', id: `cl-tab-${tab}`, 'aria-controls': `cl-panel-${tab}`, 'aria-selected': 'false', class: 'tab' }, text);
@@ -50,7 +52,7 @@ export function createCanvas(createScene: (canvas: HTMLCanvasElement) => SceneLi
   const panel3d = h('div', { class: 'view-3d', role: 'tabpanel', id: 'cl-panel-3d', 'aria-labelledby': 'cl-tab-3d' }, canvas, no3d, h('div', { class: 'view-bar' }, controls, stepBar));
 
   // Flat panel.
-  const flat = flatView();
+  const flat = flatView(ctx);
   const panelFlat = h('div', { class: 'view-flat', role: 'tabpanel', id: 'cl-panel-flat', 'aria-labelledby': 'cl-tab-flat', hidden: true }, flat.el);
 
   const loading = h('div', { class: 'stage-loading', hidden: true, role: 'status' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), LOADING_FONTS);
@@ -174,6 +176,9 @@ export function createCanvas(createScene: (canvas: HTMLCanvasElement) => SceneLi
         scene.setTheta(step >= 0 ? FOLD_STEPS[step].theta : saved);
       }
       return images;
+    },
+    showSelection() {
+      if (!flatDirty) flat.showSelection();
     },
     destroy() {
       scene.onTheta = null;
