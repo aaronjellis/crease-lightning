@@ -64,6 +64,7 @@ export function createCanvas(createScene: (canvas: HTMLCanvasElement) => SceneLi
   let tab: Tab = '3d';
   let ok3d: boolean | null = null;
   let theta = 90;
+  let lastSelection: string | null = null;
 
   const select = (next: Tab) => {
     tab = next;
@@ -178,6 +179,12 @@ export function createCanvas(createScene: (canvas: HTMLCanvasElement) => SceneLi
       return images;
     },
     showSelection() {
+      // A selection only shows, and can only be dragged, on the Flat view: picking or adding an
+      // illustration from the rail goes there.
+      // Only a new selection switches, so the 3D tab stays put once someone goes back to it.
+      const sel = ctx.selection();
+      if (sel && sel !== lastSelection && tab === '3d') select('flat');
+      lastSelection = sel;
       if (!flatDirty) flat.showSelection();
     },
     destroy() {

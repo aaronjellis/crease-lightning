@@ -1,5 +1,5 @@
 /**
- * Decorations: style tiles, the border (a switch and a pattern), a chip per illustration with a Size
+ * Decorations: style tiles, border tiles (None or a pattern), a chip per illustration with a Size
  * slider for the selected one, Add, Shuffle, Unpin all, and Undo. Picking a style, changing the
  * theme, and Unpin all can be undone (the stash lives in the app); the rest edit the decor in place.
  * Add turns off at MAX_ITEMS, the most a link, file or autosave keeps.
@@ -8,10 +8,10 @@ import { addItem, decorFromStyle, removeItem, resizeItem, shuffle, unpinAll } fr
 import type { Decor } from '../../core/decor/types';
 import { MAX_ITEM_MM, MAX_ITEMS } from '../../core/codec';
 import type { Params } from '../../core/model';
-import { BORDERS, iconById, themeById, type Theme } from '../../themes';
+import { BORDERS, borderById, iconById, themeById, type Theme } from '../../themes';
 import type { Ctx, View } from '../context';
 import { track } from '../context';
-import { h, railCard, toggle } from '../dom';
+import { h, railCard } from '../dom';
 import { iconThumb } from '../iconThumb';
 import { DECORATIONS } from '../strings';
 import { addIllustrationDialog } from './addIllustration';
@@ -56,25 +56,32 @@ export function decorationsCard(ctx: Ctx): View {
   };
 
   // ------------------------------------------------------------ border
-  const border = toggle(
-    DECORATIONS.border,
-    'decor-border',
-    (on) => {
-      const p = ctx.params();
-      const theme = themeById(p.theme);
-      const patterns = patternsFor(theme);
-      const own = theme.styles.find((s) => s.id === p.decor.style)?.border ?? null;
-      setDecor({ ...p.decor, border: on ? (own ?? patterns[0].id) : null });
-      track('decor_border_toggled', { on });
-    }
-  );
-  border.input.setAttribute('data-ph-capture-attribute-control', 'border');
-  const pattern = h('select', { name: 'decor-pattern', id: 'cl-decor-pattern', 'data-ph-capture-attribute-control': 'border-pattern' });
-  pattern.addEventListener('change', () => {
+  // One pill per choice, None first, like the style row: what's on is what's pressed.
+  const borderRow = h('div', { class: 'decor-styles decor-borders', role: 'group', 'aria-label': DECORATIONS.border });
+  let borderTheme = '';
+  let borderTiles: { id: string | null; el: HTMLButtonElement }[] = [];
+  const pickBorder = (id: string | null) => {
     const p = ctx.params();
-    if (p.decor.border) setDecor({ ...p.decor, border: pattern.value });
-  });
-  let patternTheme = '';
+    if (p.decor.border === id) return;
+    setDecor({ ...p.decor, border: id });
+    track('decor_border_picked', { border: id ?? 'none' });
+  };
+  const buildBorderTiles = (theme: Theme) => {
+    const none = { id: null, name: DECORATIONS.none, tile: null as string | null };
+    const patterns = patternsFor(theme).map((b) => ({ ...b, tile: borderById(b.id).tile as string | null }));
+    borderTiles = [none, ...patterns].map((b) => {
+      const el = h(
+        'button',
+        { type: 'button', class: 'decor-style', 'aria-pressed': 'false', 'data-ph-capture-attribute-border': b.id ?? 'none' },
+        b.tile ? h('span', { class: 'decor-thumb', 'aria-hidden': 'true' }, iconThumb(b.tile)) : null,
+        h('span', { text: b.name })
+      );
+      el.addEventListener('click', () => pickBorder(b.id));
+      return { id: b.id, el };
+    });
+    borderRow.replaceChildren(...borderTiles.map((t) => t.el));
+    borderTheme = theme.id;
+  };
 
   // ------------------------------------------------------------ illustrations
   const chipList = h('ul', { class: 'decor-chips', 'aria-label': DECORATIONS.items });
@@ -135,7 +142,8 @@ export function decorationsCard(ctx: Ctx): View {
     h('h3', { class: 'sub-heading', text: DECORATIONS.style }),
     styleRow,
     undo,
-    h('div', { class: 'decor-border' }, h('div', { class: 'toggles' }, border.el), h('label', { class: 'decor-pattern', for: 'cl-decor-pattern' }, h('span', { class: 'sub-heading', text: DECORATIONS.borderPattern }), pattern)),
+    h('h3', { class: 'sub-heading', text: DECORATIONS.border }),
+    borderRow,
     h('h3', { class: 'sub-heading', text: DECORATIONS.items }),
     empty,
     chipList,
@@ -160,13 +168,8 @@ export function decorationsCard(ctx: Ctx): View {
       });
       undo.hidden = !ctx.canDecorUndo();
 
-      if (patternTheme !== theme.id) {
-        pattern.replaceChildren(...patternsFor(theme).map((b) => h('option', { value: b.id, text: b.name })));
-        patternTheme = theme.id;
-      }
-      border.input.checked = p.decor.border !== null;
-      pattern.disabled = p.decor.border === null;
-      if (p.decor.border) pattern.value = p.decor.border;
+      if (borderTheme !== theme.id) buildBorderTiles(theme);
+      for (const t of borderTiles) t.el.setAttribute('aria-pressed', String(t.id === p.decor.border));
 
       const key = p.decor.items.map((i) => `${i.id}:${i.icon}`).join(',');
       if (key !== chipKey) {

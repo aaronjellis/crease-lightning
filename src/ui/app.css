@@ -221,7 +221,19 @@ body:has(.cl-app) { margin: 0; background: #f5f1ea; }
   .file-actions { gap: 0; }
   .file-actions .ghost { padding: 0 7px; font-size: 13px; }
   .workspace { display: block; height: auto; min-height: 0; }
-  .stage { height: min(58vh, 520px); min-height: 340px; }
+  /* The preview stays pinned under the top bar while the settings scroll beneath it, so a change made
+     far down the rail (an illustration added, a font picked) shows on the card. */
+  .stage {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 2;
+    height: min(46vh, 420px);
+    height: min(46dvh, 420px);
+    min-height: 280px;
+    box-shadow: 0 1px 0 var(--line), 0 6px 12px -8px rgb(28 26 23 / 0.25);
+  }
+  /* While typing, the keyboard takes half the screen: let the preview scroll away. */
+  .cl-app:has(.settings :is(input:not([type]), input[type='text'], input[type='search'], input[type='number'], textarea):focus) .stage { position: relative; }
   .themes { border-top: 1px solid var(--line); }
   .settings { border-left: 0; }
   .export-bar {

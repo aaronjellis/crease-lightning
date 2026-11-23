@@ -223,25 +223,31 @@ describe('Decorations card', () => {
     for (const b of shown) expect(b.textContent!.toLowerCase()).toContain('cake');
   });
 
-  test('the border switch turns the border off and on', () => {
+  const borderTile = (id: string) => $(`[data-ph-capture-attribute-border="${id}"]`);
+  const pressedBorders = () => $$('.decor-borders [aria-pressed="true"]').map((b) => b.dataset.phCaptureAttributeBorder);
+
+  test('the border row shows what is on: None, or the pressed pattern', () => {
+    expect(pressedBorders()).toEqual(['none']);
     app.setParams({ ...app.getParams(), decor: seedDecor('candles') });
-    const sw = $<HTMLInputElement>('input[name="decor-border"]');
-    expect(sw.checked).toBe(true);
-    change(sw, false);
+    expect(pressedBorders()).toEqual(['dot-row']);
+  });
+
+  test('None turns the border off, and a pattern turns it on', () => {
+    app.setParams({ ...app.getParams(), decor: seedDecor('candles') });
+    click(borderTile('none'));
     expect(app.getParams().decor.border).toBeNull();
-    change(sw, true);
-    expect(app.getParams().decor.border).toBe('dot-row');
-  });
-
-  test('the border switch on a borderless style uses the first pattern', () => {
-    change($<HTMLInputElement>('input[name="decor-border"]'), true);
-    expect(app.getParams().decor.border).toBe('dot-row');
-  });
-
-  test('the pattern select changes the border', () => {
-    app.setParams({ ...app.getParams(), decor: seedDecor('candles') });
-    change($<HTMLSelectElement>('select[name="decor-pattern"]'), 'star-row');
+    expect(pressedBorders()).toEqual(['none']);
+    click(borderTile('star-row'));
     expect(app.getParams().decor.border).toBe('star-row');
+    expect(pressedBorders()).toEqual(['star-row']);
+  });
+
+  test('the border row lists None, the theme’s own patterns, then the rest, each once', () => {
+    const ids = $$('.decor-borders .decor-style').map((b) => b.dataset.phCaptureAttributeBorder);
+    expect(ids[0]).toBe('none');
+    expect(ids[1]).toBe('dot-row');
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(borderTile('star-row').textContent).toBe('Stars');
   });
 
   test('Shuffle changes the seed', () => {
@@ -307,12 +313,13 @@ describe('Decorations card', () => {
 
   test('tracks each decorations event', () => {
     click(byText('Balloons'));
-    click($('input[name="decor-border"]'));
+    click($('[data-ph-capture-attribute-border="star-row"]'));
     click(byText('Add'));
     click($('.decor-add [data-ph-capture-attribute-icon="stork"]'));
     click(chips()[0].querySelector('.decor-chip-remove')!);
     click(byText('Shuffle'));
-    expect(events()).toEqual(['decor_style_picked', 'decor_border_toggled', 'decor_item_added', 'decor_item_removed', 'decor_shuffled']);
+    expect(events()).toEqual(['decor_style_picked', 'decor_border_picked', 'decor_item_added', 'decor_item_removed', 'decor_shuffled']);
+    expect(capture).toHaveBeenCalledWith('decor_border_picked', { project: 'crease-lightning', border: 'star-row' });
     expect(capture).toHaveBeenCalledWith('decor_style_picked', { project: 'crease-lightning', theme: 'birthday', style: 'balloons' });
     expect(capture).toHaveBeenCalledWith('decor_item_added', { project: 'crease-lightning', icon: 'stork' });
   });
@@ -410,6 +417,16 @@ describe('Flat view editing', () => {
     expect(moved.centre.x).toBeCloseTo(to.x, 6);
     expect(moved.centre.y).toBeCloseTo(to.y, 6);
     expect(moved.displaced).toBe(false);
+  });
+
+  test('a touch on an item doesn’t scroll the page; a touch on bare sheet does', () => {
+    const touch = (el: Element) => {
+      const e = new Event('touchstart', { bubbles: true, cancelable: true });
+      el.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    expect(touch(hit(placedItem().id))).toBe(true);
+    expect(touch(innerSvg())).toBe(false);
   });
 
   test('pointerdown on an item selects it', () => {
@@ -702,5 +719,33 @@ describe('Flat view editing', () => {
       expect(capture).toHaveBeenCalledWith('decor_item_removed', { project: 'crease-lightning', icon });
       expect(events().filter((e) => e === 'decor_item_removed')).toHaveLength(1);
     });
+  });
+});
+
+describe('picking an illustration from the rail', () => {
+  const okScene = (): SceneLike => ({ ...noScene(), ready: Promise.resolve({ ok: true }) });
+  const flatShown = () => !$('#cl-panel-flat').hidden;
+
+  beforeEach(async () => {
+    app.destroy();
+    root.replaceChildren();
+    app = mountApp(root, 'labs', {}, { loadFont, createScene: okScene, storage: null, locale: 'en-US' });
+    await app.whenIdle();
+    app.setParams({ ...defaultParams('en-US'), decor: seedDecor('confetti') });
+    await app.whenIdle();
+  });
+
+  test('a new selection opens the Flat view, where it can be dragged', () => {
+    expect(flatShown()).toBe(false);
+    click($(`[data-ph-capture-attribute-item="${app.getParams().decor.items[0].id}"] .decor-chip-select`));
+    expect(flatShown()).toBe(true);
+  });
+
+  test('going back to 3D keeps 3D while the selection stays', async () => {
+    click($(`[data-ph-capture-attribute-item="${app.getParams().decor.items[0].id}"] .decor-chip-select`));
+    click($('#cl-tab-3d'));
+    click(byText('Shuffle'));
+    await app.whenIdle();
+    expect(flatShown()).toBe(false);
   });
 });

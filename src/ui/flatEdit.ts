@@ -246,6 +246,15 @@ export function decorEditor(ctx: Ctx): DecorEditor {
     window.addEventListener('pointercancel', onCancel);
   };
 
+  /**
+   * A touch on an illustration must not scroll the page. CSS `touch-action` doesn't reach SVG shapes in
+   * Safari or Chrome, so the browser pans, cancels the pointer, and the drag never starts. Blocking the
+   * touch's default keeps the pointer events; a touch anywhere else on the sheet still scrolls.
+   */
+  const onTouchStart = (e: TouchEvent) => {
+    if ((e.target as Element).closest?.('.decor-hit, .decor-handle')) e.preventDefault();
+  };
+
   // ---------------------------------------------------------------- keyboard
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -398,6 +407,7 @@ export function decorEditor(ctx: Ctx): DecorEditor {
       }
       next.appendChild(layer);
       next.addEventListener('pointerdown', onDown);
+      next.addEventListener('touchstart', onTouchStart, { passive: false });
       next.addEventListener('keydown', onKey);
       next.addEventListener('focusin', onFocus);
       if (drag) next.setAttribute('data-dragging', '');
